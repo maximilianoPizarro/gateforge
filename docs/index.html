@@ -126,6 +126,78 @@
 
   <section class="section" style="background: #f5f5f5;">
     <div class="container">
+      <h2>Using GateForge &mdash; AI Prompt Examples</h2>
+      <p style="color:#6a6e73; margin-bottom: 20px;">GateForge includes an AI-powered chat assistant that helps you analyze, plan, and execute your 3scale to Connectivity Link migration. Here are some example prompts to get started:</p>
+
+      <div class="card-grid">
+        <div class="card">
+          <h3>🔍 Discovery &amp; Analysis</h3>
+          <p><strong>Try these prompts:</strong></p>
+          <div class="install-block">
+            <span class="cmd">List all 3scale Products and Backends deployed in my cluster and show their current configuration</span>
+          </div>
+          <div class="install-block">
+            <span class="cmd">List all namespaces with 3scale resources</span>
+          </div>
+          <div class="install-block">
+            <span class="cmd">Show kuadrantctl topology</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3>🔄 Migration Planning</h3>
+          <p><strong>Try these prompts:</strong></p>
+          <div class="install-block">
+            <span class="cmd">Analyze my 3scale configuration and generate a migration plan to Connectivity Link using a shared gateway strategy</span>
+          </div>
+          <div class="install-block">
+            <span class="cmd">Compare the shared, dual, and dedicated gateway strategies for my migration. What are the trade-offs of each?</span>
+          </div>
+          <div class="install-block">
+            <span class="cmd">Explain the migration steps from 3scale to Kuadrant</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3>🛡️ Policy Generation</h3>
+          <p><strong>Try these prompts:</strong></p>
+          <div class="install-block">
+            <span class="cmd">Generate an AuthPolicy for my API that replaces the 3scale API Key authentication with Kuadrant AuthPolicy using Authorino</span>
+          </div>
+          <div class="install-block">
+            <span class="cmd">Create a RateLimitPolicy equivalent to my 3scale Application Plan that limits 100 requests per minute per user</span>
+          </div>
+          <div class="install-block">
+            <span class="cmd">What is a DNSPolicy in Kuadrant?</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3>🌐 Route &amp; Gateway Generation</h3>
+          <p><strong>Try these prompts:</strong></p>
+          <div class="install-block">
+            <span class="cmd">Convert my 3scale mapping rules into Kubernetes Gateway API HTTPRoute resources with proper path and method matching</span>
+          </div>
+          <div class="install-block">
+            <span class="cmd">Generate Gateway YAML for istio class</span>
+          </div>
+          <div class="install-block">
+            <span class="cmd">How do I configure TLSPolicy for my migrated APIs?</span>
+          </div>
+        </div>
+      </div>
+
+      <h3 style="margin-top: 32px;">Gateway Strategy Comparison</h3>
+      <table class="arch-table">
+        <thead><tr><th>Strategy</th><th>Description</th><th>Best For</th></tr></thead>
+        <tbody>
+          <tr><td><code>shared</code></td><td>All APIs share a single Istio Gateway with multiple HTTPRoutes</td><td>Small to medium clusters, simpler management</td></tr>
+          <tr><td><code>dual</code></td><td>Two Gateways (internal/external) with APIs split by exposure level</td><td>Organizations requiring network segmentation</td></tr>
+          <tr><td><code>dedicated</code></td><td>One Gateway per 3scale Product, full isolation per API</td><td>Large enterprises, strict isolation requirements</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
       <h2>Architecture</h2>
       <table class="arch-table">
         <thead>
