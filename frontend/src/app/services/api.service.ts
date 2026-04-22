@@ -78,6 +78,21 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface ApplyResult {
+  planId: string;
+  applied: number;
+  failed: number;
+  results: ResourceResult[];
+}
+
+export interface ResourceResult {
+  kind: string;
+  name: string;
+  namespace: string;
+  success: boolean;
+  message: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private baseUrl = '/api';
@@ -112,6 +127,10 @@ export class ApiService {
 
   getAuditLog(): Observable<AuditEntry[]> {
     return this.http.get<AuditEntry[]>(`${this.baseUrl}/audit/reports`);
+  }
+
+  applyPlan(planId: string): Observable<ApplyResult> {
+    return this.http.post<ApplyResult>(`${this.baseUrl}/migration/plans/${planId}/apply`, {});
   }
 
   chat(message: string): Observable<ChatMessage> {

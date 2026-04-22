@@ -2,7 +2,7 @@ import { Component, CUSTOM_ELEMENTS_SCHEMA, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { ApiService, ThreeScaleProduct, MigrationPlan } from '../../services/api.service';
+import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult } from '../../services/api.service';
 
 @Component({
   selector: 'app-migration-wizard',
@@ -138,8 +138,30 @@ import { ApiService, ThreeScaleProduct, MigrationPlan } from '../../services/api
           </div>
         </div>
 
+        <div *ngIf="applyResult" class="apply-result" [class.success]="applyResult.failed === 0" [class.partial]="applyResult.failed > 0">
+          <div class="apply-summary">
+            <strong *ngIf="applyResult.failed === 0">Migration applied successfully!</strong>
+            <strong *ngIf="applyResult.failed > 0">Migration completed with errors</strong>
+            <span class="apply-counts">
+              {{ applyResult.applied }} applied, {{ applyResult.failed }} failed
+            </span>
+          </div>
+          <div class="apply-details">
+            <div *ngFor="let r of applyResult.results" class="apply-row" [class.err]="!r.success">
+              <span class="badge badge-kind">{{ r.kind }}</span>
+              <span class="apply-name">{{ r.name }}</span>
+              <span class="apply-status" [class.ok]="r.success" [class.fail]="!r.success">
+                {{ r.success ? 'Applied' : r.message }}
+              </span>
+            </div>
+          </div>
+        </div>
+
         <div class="actions">
           <button type="button" class="btn-secondary" (click)="step = 2">Back</button>
+          <button type="button" class="btn-apply" (click)="applyMigration()" [disabled]="applying || !!applyResult">
+            {{ applying ? 'Applying…' : (applyResult ? 'Applied' : 'Apply to Cluster') }}
+          </button>
         </div>
       </div>
     </section>
@@ -443,6 +465,27 @@ import { ApiService, ThreeScaleProduct, MigrationPlan } from '../../services/api
       overflow-x: auto;
       font-size: 0.82rem;
     }
+    .apply-result {
+      border-radius: 8px; padding: 16px 20px; margin-bottom: 22px;
+    }
+    .apply-result.success { background: #e6f5e0; border: 1px solid #3f9c35; }
+    .apply-result.partial { background: #fef3cd; border: 1px solid #d4a017; }
+    .apply-summary { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .apply-summary strong { font-size: 1rem; }
+    .apply-counts { font-size: 0.85rem; color: #6a6e73; }
+    .apply-details { display: flex; flex-direction: column; gap: 6px; }
+    .apply-row { display: flex; align-items: center; gap: 10px; font-size: 0.88rem; padding: 4px 0; }
+    .apply-row.err { color: #c9190b; }
+    .apply-name { flex: 1; font-weight: 500; }
+    .apply-status.ok { color: #3f9c35; font-weight: 600; }
+    .apply-status.fail { color: #c9190b; font-size: 0.82rem; }
+    .btn-apply {
+      padding: 10px 22px; border-radius: 6px; font-weight: 600; cursor: pointer;
+      border: none; font-family: inherit; font-size: 0.95rem;
+      background: #3f9c35; color: white;
+    }
+    .btn-apply:hover:not(:disabled) { background: #2d6b24; }
+    .btn-apply:disabled { opacity: 0.5; cursor: not-allowed; }
     .actions { display: flex; gap: 12px; flex-wrap: wrap; }
     .btn-primary, .btn-secondary {
       padding: 10px 22px;
@@ -498,6 +541,8 @@ export class MigrationWizardComponent implements OnInit {
   analyzing = false;
   plan: MigrationPlan | null = null;
   yamlOpen: Record<number, boolean> = {};
+  applying = false;
+  applyResult: ApplyResult | null = null;
 
   strategies = [
     {
@@ -540,6 +585,7 @@ export class MigrationWizardComponent implements OnInit {
 
   analyze(): void {
     this.analyzing = true;
+    this.applyResult = null;
     const selected = this.products.filter(p => p.selected).map(p => p.product.name);
     this.api.analyzeMigration(this.gatewayStrategy, selected).subscribe({
       next: (plan) => {
@@ -550,6 +596,23 @@ export class MigrationWizardComponent implements OnInit {
       },
       error: () => {
         this.analyzing = false;
+      }
+    });
+  }
+
+  applyMigration(): void {
+    if (!this.plan) return;
+    this.applying = true;
+    this.api.applyPlan(this.plan.id).subscribe({
+      next: (result) => {
+        this.applyResult = result;
+        this.applying = false;
+      },
+      error: () => {
+        this.applyResult = { planId: this.plan!.id, applied: 0, failed: 1, results: [
+          { kind: 'Error', name: 'Apply failed', namespace: '', success: false, message: 'Backend communication error' }
+        ]};
+        this.applying = false;
       }
     });
   }
