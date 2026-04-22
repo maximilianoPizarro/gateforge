@@ -4,7 +4,7 @@ global:
 backend:
   image:
     repository: quay.io/maximilianopizarro/gateforge-backend
-    tag: v0.1.4
+    tag: v0.1.4-crd-fix
     pullPolicy: Always
   replicas: 1
   resources:
