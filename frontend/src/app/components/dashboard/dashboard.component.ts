@@ -1,12 +1,10 @@
 import { Component, CUSTOM_ELEMENTS_SCHEMA, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { ApiService, ProjectInfo } from '../../services/api.service';
 
-const SYSTEM_PREFIXES = [
-  'openshift-', 'kube-', 'default', 'openshift'
-];
+const SYSTEM_PREFIXES = ['openshift-', 'kube-', 'default', 'openshift'];
 
 @Component({
   selector: 'app-dashboard',
@@ -93,20 +91,21 @@ const SYSTEM_PREFIXES = [
 
       <div class="projects-section" *ngIf="!loading">
         <div class="section-header">
-          <h2>Cluster Projects</h2>
+          <h2>Cluster Projects <span class="count-badge">{{ filteredProjects.length }}</span></h2>
           <div class="filter-bar">
-            <input type="text" [(ngModel)]="searchTerm" placeholder="Filter projects..." class="search-input">
+            <input type="text" [(ngModel)]="searchTerm" (input)="onSearchChange()" placeholder="Filter projects..." class="search-input">
             <label class="toggle-label">
-              <input type="checkbox" [(ngModel)]="showSystem" (change)="applyFilter()">
-              Show system projects ({{ systemProjects.length }})
+              <input type="checkbox" [(ngModel)]="showSystem" (change)="onSearchChange()">
+              Show system ({{ systemProjects.length }})
             </label>
           </div>
         </div>
 
         <div class="project-grid">
-          <div *ngFor="let project of filteredProjects" class="project-card"
+          <div *ngFor="let project of pagedProjects" class="project-card clickable"
                [class.has-threescale]="project.hasThreeScale"
-               [class.has-kuadrant]="project.hasKuadrant">
+               [class.has-kuadrant]="project.hasKuadrant"
+               (click)="goToChat(project)">
             <div class="project-header">
               <h4>{{ project.name }}</h4>
               <div class="badges">
@@ -118,19 +117,40 @@ const SYSTEM_PREFIXES = [
               <span class="status" [class.active]="project.status === 'Active'">{{ project.status }}</span>
               <span class="date">{{ project.creationTimestamp | date:'mediumDate' }}</span>
             </div>
+            <div class="project-action">Click to analyze with AI &rarr;</div>
           </div>
         </div>
 
-        <div *ngIf="filteredProjects.length === 0" class="empty-state">
-          <p *ngIf="loading">Loading cluster projects...</p>
-          <p *ngIf="!loading && allProjects.length === 0">No projects found. Ensure the backend has cluster-admin access.</p>
-          <p *ngIf="!loading && allProjects.length > 0">No projects match your filter.</p>
+        <div *ngIf="filteredProjects.length === 0 && !loading" class="empty-state">
+          <p *ngIf="allProjects.length === 0">No projects found. Ensure the backend has cluster-admin access.</p>
+          <p *ngIf="allProjects.length > 0">No projects match your filter.</p>
+        </div>
+
+        <div *ngIf="totalPages > 1" class="paginator">
+          <button (click)="goToPage(currentPage - 1)" [disabled]="currentPage === 1" class="page-btn">&laquo; Prev</button>
+          <button *ngFor="let p of visiblePages" (click)="goToPage(p)"
+                  [class.active]="p === currentPage" class="page-btn page-num">{{ p }}</button>
+          <button (click)="goToPage(currentPage + 1)" [disabled]="currentPage === totalPages" class="page-btn">Next &raquo;</button>
+          <select [(ngModel)]="pageSize" (change)="onPageSizeChange()" class="page-size-select">
+            <option [ngValue]="12">12 / page</option>
+            <option [ngValue]="24">24 / page</option>
+            <option [ngValue]="48">48 / page</option>
+          </select>
         </div>
       </div>
 
       <div *ngIf="loading" class="loading-state">
-        <rh-spinner></rh-spinner>
-        <p>Loading cluster data...</p>
+        <div class="skeleton-grid">
+          <div *ngFor="let i of [1,2,3,4]" class="skeleton-stat"></div>
+        </div>
+        <div class="skeleton-bar"></div>
+        <div class="skeleton-grid-cards">
+          <div *ngFor="let i of [1,2,3,4,5,6]" class="skeleton-card">
+            <div class="skeleton-line long"></div>
+            <div class="skeleton-line short"></div>
+          </div>
+        </div>
+        <p class="loading-text">Loading cluster data...</p>
       </div>
 
       <div class="links-section" *ngIf="!loading">
@@ -203,6 +223,10 @@ const SYSTEM_PREFIXES = [
       font-family: 'Red Hat Display', sans-serif; font-size: 1.5rem;
       font-weight: 600; margin-bottom: 8px; color: #151515;
     }
+    .count-badge {
+      display: inline-block; background: #e8e8e8; color: #6a6e73; font-size: 0.8rem;
+      padding: 1px 10px; border-radius: 10px; margin-left: 8px; font-weight: 500;
+    }
     .section-desc { color: #6a6e73; margin-bottom: 16px; }
 
     .getting-started { margin-bottom: 40px; }
@@ -234,17 +258,18 @@ const SYSTEM_PREFIXES = [
     .filter-bar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
     .search-input {
       padding: 8px 14px; border: 1px solid #d2d2d2; border-radius: 6px;
-      font-size: 0.9rem; width: 220px;
+      font-size: 0.9rem; width: 220px; font-family: inherit;
     }
-    .search-input:focus { outline: none; border-color: #ee0000; }
+    .search-input:focus { outline: none; border-color: #ee0000; box-shadow: 0 0 0 2px rgba(238,0,0,0.15); }
     .toggle-label { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: #6a6e73; cursor: pointer; }
 
     .project-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
     .project-card {
       background: white; border: 1px solid #d2d2d2; border-radius: 8px; padding: 16px 20px;
-      border-left: 4px solid #d2d2d2; transition: all 0.15s;
+      border-left: 4px solid #d2d2d2; transition: all 0.2s;
     }
-    .project-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .project-card.clickable { cursor: pointer; }
+    .project-card.clickable:hover { border-left-color: #ee0000; box-shadow: 0 4px 16px rgba(0,0,0,0.08); transform: translateY(-1px); }
     .project-card.has-threescale { border-left-color: #0066cc; }
     .project-card.has-kuadrant { border-left-color: #3f9c35; }
     .project-card.has-threescale.has-kuadrant { border-left-color: #ee0000; }
@@ -259,9 +284,58 @@ const SYSTEM_PREFIXES = [
     .project-meta { display: flex; gap: 16px; margin-top: 8px; font-size: 0.82rem; color: #6a6e73; }
     .status { font-weight: 500; }
     .status.active { color: #3f9c35; }
+    .project-action {
+      margin-top: 10px; font-size: 0.78rem; color: #ee0000; font-weight: 500;
+      opacity: 0; transition: opacity 0.2s;
+    }
+    .project-card:hover .project-action { opacity: 1; }
 
-    .loading-state { text-align: center; padding: 80px 20px; }
-    .loading-state p { margin-top: 12px; color: #6a6e73; }
+    .paginator {
+      display: flex; align-items: center; justify-content: center; gap: 4px;
+      margin-top: 20px; flex-wrap: wrap;
+    }
+    .page-btn {
+      padding: 6px 14px; border: 1px solid #d2d2d2; border-radius: 4px;
+      background: white; cursor: pointer; font-size: 0.85rem; color: #151515;
+      transition: all 0.15s; font-family: inherit;
+    }
+    .page-btn:hover:not(:disabled) { border-color: #ee0000; color: #ee0000; }
+    .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .page-btn.page-num.active { background: #ee0000; color: white; border-color: #ee0000; }
+    .page-size-select {
+      margin-left: 12px; padding: 6px 8px; border: 1px solid #d2d2d2; border-radius: 4px;
+      font-size: 0.85rem; font-family: inherit; cursor: pointer;
+    }
+
+    @keyframes shimmer {
+      0% { background-position: -400px 0; }
+      100% { background-position: 400px 0; }
+    }
+    .loading-state { padding: 40px 0; }
+    .loading-text { text-align: center; color: #6a6e73; margin-top: 24px; }
+    .skeleton-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+    .skeleton-stat {
+      height: 80px; border-radius: 8px;
+      background: linear-gradient(90deg, #e8e8e8 25%, #f5f5f5 50%, #e8e8e8 75%);
+      background-size: 800px 100%; animation: shimmer 1.5s infinite;
+    }
+    .skeleton-bar {
+      height: 40px; border-radius: 6px; margin-bottom: 16px;
+      background: linear-gradient(90deg, #e8e8e8 25%, #f5f5f5 50%, #e8e8e8 75%);
+      background-size: 800px 100%; animation: shimmer 1.5s infinite;
+    }
+    .skeleton-grid-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+    .skeleton-card {
+      padding: 20px; border-radius: 8px; background: white; border: 1px solid #e8e8e8;
+    }
+    .skeleton-line {
+      height: 14px; border-radius: 4px; margin-bottom: 10px;
+      background: linear-gradient(90deg, #e8e8e8 25%, #f5f5f5 50%, #e8e8e8 75%);
+      background-size: 800px 100%; animation: shimmer 1.5s infinite;
+    }
+    .skeleton-line.long { width: 75%; }
+    .skeleton-line.short { width: 45%; }
+
     .empty-state { text-align: center; padding: 40px; color: #6a6e73; }
 
     .links-section { margin-bottom: 24px; }
@@ -273,6 +347,11 @@ const SYSTEM_PREFIXES = [
     .link-card:hover { border-color: #0066cc; text-decoration: none; }
     .link-card strong { display: block; color: #0066cc; margin-bottom: 4px; font-size: 0.95rem; }
     .link-card p { color: #6a6e73; font-size: 0.82rem; margin: 0; }
+
+    @media (max-width: 768px) {
+      .hero-stats { grid-template-columns: repeat(2, 1fr); }
+      .skeleton-grid { grid-template-columns: repeat(2, 1fr); }
+    }
   `]
 })
 export class DashboardComponent implements OnInit {
@@ -280,9 +359,14 @@ export class DashboardComponent implements OnInit {
   userProjects: ProjectInfo[] = [];
   systemProjects: ProjectInfo[] = [];
   filteredProjects: ProjectInfo[] = [];
+  pagedProjects: ProjectInfo[] = [];
   loading = true;
   searchTerm = '';
   showSystem = false;
+
+  currentPage = 1;
+  pageSize = 12;
+  totalPages = 1;
 
   samplePrompts = [
     'List all 3scale Products in my cluster',
@@ -296,7 +380,16 @@ export class DashboardComponent implements OnInit {
   get threeScaleCount() { return this.userProjects.filter(p => p.hasThreeScale).length; }
   get kuadrantCount() { return this.userProjects.filter(p => p.hasKuadrant).length; }
 
-  constructor(private api: ApiService) {}
+  get visiblePages(): number[] {
+    const pages: number[] = [];
+    let start = Math.max(1, this.currentPage - 2);
+    let end = Math.min(this.totalPages, start + 4);
+    start = Math.max(1, end - 4);
+    for (let i = start; i <= end; i++) pages.push(i);
+    return pages;
+  }
+
+  constructor(private api: ApiService, private router: Router) {}
 
   ngOnInit() {
     this.api.getProjects().subscribe({
@@ -311,17 +404,46 @@ export class DashboardComponent implements OnInit {
     });
   }
 
-  applyFilter() {
+  onSearchChange() {
+    this.currentPage = 1;
+    this.applyFilter();
+  }
+
+  onPageSizeChange() {
+    this.currentPage = 1;
+    this.updatePagination();
+  }
+
+  goToPage(page: number) {
+    if (page < 1 || page > this.totalPages) return;
+    this.currentPage = page;
+    this.updatePagination();
+  }
+
+  goToChat(project: ProjectInfo) {
+    const prompt = project.hasThreeScale
+      ? `Analyze the 3scale configuration in project "${project.name}" and suggest a migration plan to Connectivity Link`
+      : `List all resources in project "${project.name}" and check if there are 3scale or Kuadrant resources to migrate`;
+    this.router.navigate(['/chat'], { queryParams: { q: prompt } });
+  }
+
+  private applyFilter() {
     const base = this.showSystem ? this.allProjects : this.userProjects;
     const term = this.searchTerm.toLowerCase().trim();
     this.filteredProjects = term
       ? base.filter(p => p.name.toLowerCase().includes(term))
-      : base;
+      : [...base];
+    this.updatePagination();
+  }
+
+  private updatePagination() {
+    this.totalPages = Math.max(1, Math.ceil(this.filteredProjects.length / this.pageSize));
+    if (this.currentPage > this.totalPages) this.currentPage = this.totalPages;
+    const start = (this.currentPage - 1) * this.pageSize;
+    this.pagedProjects = this.filteredProjects.slice(start, start + this.pageSize);
   }
 
   private isSystem(name: string): boolean {
-    return SYSTEM_PREFIXES.some(prefix =>
-      prefix === name || name.startsWith(prefix)
-    );
+    return SYSTEM_PREFIXES.some(prefix => prefix === name || name.startsWith(prefix));
   }
 }

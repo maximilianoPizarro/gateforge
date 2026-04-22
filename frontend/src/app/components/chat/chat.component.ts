@@ -1,6 +1,7 @@
-import { Component, CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
+import { Component, CUSTOM_ELEMENTS_SCHEMA, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { ApiService, ChatMessage } from '../../services/api.service';
 
 @Component({
@@ -135,7 +136,7 @@ import { ApiService, ChatMessage } from '../../services/api.service';
     .doc-links li { margin: 4px 0; }
   `]
 })
-export class ChatComponent {
+export class ChatComponent implements OnInit {
   messages: ChatMessage[] = [];
   userInput = '';
   loading = false;
@@ -182,7 +183,16 @@ export class ChatComponent {
     'Explain the migration steps'
   ];
 
-  constructor(private api: ApiService) {}
+  constructor(private api: ApiService, private route: ActivatedRoute) {}
+
+  ngOnInit() {
+    this.route.queryParams.subscribe(params => {
+      const q = params['q'];
+      if (q && this.messages.length === 0 && !this.loading) {
+        this.usePrompt(q);
+      }
+    });
+  }
 
   usePrompt(prompt: string) {
     this.userInput = prompt;
