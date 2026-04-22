@@ -1,6 +1,9 @@
 package io.gateforge.resource;
 
+import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.dsl.base.CustomResourceDefinitionContext;
+import io.fabric8.kubernetes.client.utils.Serialization;
 import io.gateforge.model.AuditEntry;
 import io.gateforge.model.MigrationPlan;
 import io.gateforge.service.MigrationService;
@@ -9,8 +12,6 @@ import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import org.jboss.logging.Logger;
 
-import java.io.ByteArrayInputStream;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.*;
 
@@ -54,17 +55,7 @@ public class MigrationResource {
 
         for (MigrationPlan.GeneratedResource res : plan.resources()) {
             try {
-                var items = kubernetesClient.load(
-                        new ByteArrayInputStream(res.yaml().getBytes(StandardCharsets.UTF_8))
-                ).items();
-
-                for (var item : items) {
-                    if (res.namespace() != null && !res.namespace().isBlank()) {
-                        item.getMetadata().setNamespace(res.namespace());
-                    }
-                }
-
-                kubernetesClient.resourceList(items).createOrReplace();
+                applyYaml(res.yaml(), res.namespace());
                 results.add(new ResourceResult(res.kind(), res.name(), res.namespace(), true, "Applied"));
                 applied++;
 
@@ -73,7 +64,6 @@ public class MigrationResource {
                         Instant.now(), "APPLY", res.kind(), res.name(), res.namespace(),
                         null, res.yaml(), "GateForge Migration Wizard"
                 ));
-
                 LOG.infof("Applied %s/%s to namespace %s", res.kind(), res.name(), res.namespace());
             } catch (Exception e) {
                 results.add(new ResourceResult(res.kind(), res.name(), res.namespace(), false, e.getMessage()));
@@ -83,6 +73,14 @@ public class MigrationResource {
         }
 
         return new ApplyResult(id, applied, failed, results);
+    }
+
+    private void applyYaml(String yaml, String namespace) {
+        GenericKubernetesResource generic = Serialization.unmarshal(yaml, GenericKubernetesResource.class);
+        if (namespace != null && !namespace.isBlank()) {
+            generic.getMetadata().setNamespace(namespace);
+        }
+        kubernetesClient.resource(generic).serverSideApply();
     }
 
     @GET
