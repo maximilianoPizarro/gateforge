@@ -68,8 +68,6 @@ public class MigrationService {
 
         for (ThreeScaleProduct product : products) {
             String sysName = product.systemName();
-            String ns = product.namespace() != null && !product.namespace().isBlank()
-                    ? product.namespace() : gatewayNamespace;
             String routeName = sysName + "-route";
 
             if ("dedicated".equals(gatewayStrategy)) {
@@ -80,12 +78,22 @@ public class MigrationService {
 
             List<ThreeScaleProduct.MappingRule> effectiveRules = product.mappingRules();
             String backendSvcName = sysName;
-            if (effectiveRules.isEmpty()) {
-                var discovered = discoverPathsFromBackends(product, backendEndpoints);
+            String ns = null;
+
+            var discovered = discoverPathsFromBackends(product, backendEndpoints);
+            if (!discovered.rules.isEmpty()) {
                 effectiveRules = discovered.rules;
-                if (discovered.serviceName != null) {
-                    backendSvcName = discovered.serviceName;
-                }
+            }
+            if (discovered.serviceName != null) {
+                backendSvcName = discovered.serviceName;
+            }
+            if (discovered.namespace != null && !discovered.namespace.isBlank()) {
+                ns = discovered.namespace;
+            }
+
+            if (ns == null || ns.isBlank()) {
+                ns = product.namespace() != null && !product.namespace().isBlank()
+                        ? product.namespace() : gatewayNamespace;
             }
 
             resources.add(buildHttpRoute(routeName, ns, gatewayName, product, effectiveRules, backendSvcName));
@@ -298,7 +306,7 @@ public class MigrationService {
     }
 
     private record BackendIndex(Map<Long, String> byId, Map<String, String> byName) {}
-    private record DiscoveredPaths(List<ThreeScaleProduct.MappingRule> rules, String serviceName) {}
+    private record DiscoveredPaths(List<ThreeScaleProduct.MappingRule> rules, String serviceName, String namespace) {}
 
     private DiscoveredPaths discoverPathsFromBackends(
             ThreeScaleProduct product, BackendIndex backends) {
@@ -316,14 +324,15 @@ public class MigrationService {
             if (endpoint == null || endpoint.isBlank()) continue;
 
             String svcName = extractServiceName(endpoint);
+            String svcNs = extractServiceNamespace(endpoint);
             List<ThreeScaleProduct.MappingRule> rules = fetchOpenApiPaths(endpoint);
             if (!rules.isEmpty()) {
-                LOG.infof("Discovered %d paths from backend %s for product %s",
-                        rules.size(), endpoint, product.systemName());
-                return new DiscoveredPaths(rules, svcName);
+                LOG.infof("Discovered %d paths from backend %s (ns=%s) for product %s",
+                        rules.size(), endpoint, svcNs, product.systemName());
+                return new DiscoveredPaths(rules, svcName, svcNs);
             }
         }
-        return new DiscoveredPaths(List.of(), null);
+        return new DiscoveredPaths(List.of(), null, null);
     }
 
     private BackendIndex resolveBackendEndpoints() {
@@ -423,6 +432,22 @@ public class MigrationService {
         } catch (Exception e) {
             return "";
         }
+    }
+
+    private String extractServiceNamespace(String endpoint) {
+        try {
+            URI uri = URI.create(endpoint);
+            String host = uri.getHost();
+            if (host != null) {
+                String[] parts = host.split("\\.");
+                if (parts.length >= 2) {
+                    return parts[1];
+                }
+            }
+        } catch (Exception e) {
+            LOG.debugf("Failed to extract namespace from %s", endpoint);
+        }
+        return null;
     }
 
     private long extractBackendId(String backendName) {
