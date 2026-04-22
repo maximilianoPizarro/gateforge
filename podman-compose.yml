@@ -1,0 +1,34 @@
+version: "3.8"
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.jvm
+    container_name: gateforge-backend
+    ports:
+      - "8080:8080"
+    environment:
+      QUARKUS_PROFILE: dev
+      AI_ENDPOINT: ${AI_ENDPOINT:-https://litellm-prod.apps.maas.redhatworkshops.io/v1}
+      AI_MODEL: ${AI_MODEL:-deepseek-r1-distill-qwen-14b}
+      AI_API_KEY: ${AI_API_KEY:-dummy}
+      THREESCALE_ADMIN_URL: ${THREESCALE_ADMIN_URL:-}
+      THREESCALE_ACCESS_TOKEN: ${THREESCALE_ACCESS_TOKEN:-}
+      QUARKUS_KUBERNETES_CLIENT_MASTER_URL: ${KUBE_API_URL:-}
+      QUARKUS_KUBERNETES_CLIENT_TOKEN: ${KUBE_TOKEN:-}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/q/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: gateforge-frontend
+    ports:
+      - "4200:8080"
+    depends_on:
+      backend:
+        condition: service_healthy

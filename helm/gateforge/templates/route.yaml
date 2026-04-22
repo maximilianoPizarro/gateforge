@@ -1,0 +1,21 @@
+{{- if .Values.route.enabled }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "gateforge.fullname" . }}
+  labels:
+    {{- include "gateforge.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.route.host }}
+  host: {{ .Values.route.host }}
+  {{- end }}
+  to:
+    kind: Service
+    name: {{ include "gateforge.fullname" . }}-frontend
+    weight: 100
+  port:
+    targetPort: 8080
+  tls:
+    termination: {{ .Values.route.tls.termination | default "edge" }}
+    insecureEdgeTerminationPolicy: Redirect
+{{- end }}

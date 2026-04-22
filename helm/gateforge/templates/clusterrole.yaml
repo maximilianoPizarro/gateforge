@@ -1,0 +1,16 @@
+{{- if .Values.rbac.clusterAdmin }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "gateforge.fullname" . }}-cluster-admin
+  labels:
+    {{- include "gateforge.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "gateforge.fullname" . }}-backend
+    namespace: {{ .Release.Namespace }}
+{{- end }}

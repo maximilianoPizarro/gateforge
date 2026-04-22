@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "gateforge.fullname" . }}-backend
+  labels:
+    app: gateforge-backend
+    {{- include "gateforge.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.backend.replicas }}
+  selector:
+    matchLabels:
+      app: gateforge-backend
+  template:
+    metadata:
+      labels:
+        app: gateforge-backend
+    spec:
+      serviceAccountName: {{ include "gateforge.fullname" . }}-backend
+      containers:
+        - name: backend
+          image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          env:
+            - name: AI_ENDPOINT
+              value: {{ .Values.ai.endpoint | quote }}
+            - name: AI_MODEL
+              value: {{ .Values.ai.model | quote }}
+            - name: AI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "gateforge.fullname" . }}-config
+                  key: AI_API_KEY
+            - name: THREESCALE_ADMIN_URL
+              value: {{ .Values.threescale.adminApi.url | quote }}
+            - name: THREESCALE_ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "gateforge.fullname" . }}-config
+                  key: THREESCALE_ACCESS_TOKEN
+            - name: CL_TARGET_NAMESPACE
+              value: {{ .Values.connectivityLink.targetNamespace | quote }}
+            - name: CL_GATEWAY_STRATEGY
+              value: {{ .Values.connectivityLink.gatewayStrategy | quote }}
+            - name: CL_GATEWAY_CLASS
+              value: {{ .Values.connectivityLink.gatewayClassName | quote }}
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /q/health/ready
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /q/health/live
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20

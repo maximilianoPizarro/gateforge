@@ -1,0 +1,25 @@
+apiVersion: v2
+name: gateforge
+description: AI-powered 3scale to Red Hat Connectivity Link migration platform
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+icon: https://maximilianopizarro.github.io/gateforge/assets/logo.svg
+home: https://maximilianopizarro.github.io/gateforge/
+sources:
+  - https://github.com/maximilianoPizarro/gateforge
+maintainers:
+  - name: Maximiliano Pizarro
+    email: maximiliano.pizarro.5@gmail.com
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/operator: "false"
+  artifacthub.io/links: |
+    - name: Documentation
+      url: https://maximilianopizarro.github.io/gateforge/
+    - name: Red Hat Connectivity Link
+      url: https://docs.redhat.com/en/documentation/red_hat_connectivity_link
+    - name: Kuadrant
+      url: https://docs.kuadrant.io/
+    - name: kuadrantctl
+      url: https://github.com/Kuadrant/kuadrantctl

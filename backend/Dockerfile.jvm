@@ -1,0 +1,22 @@
+FROM registry.access.redhat.com/ubi9/openjdk-17:1.20 AS builder
+USER root
+WORKDIR /build
+COPY pom.xml .
+COPY src ./src
+RUN mvn package -DskipTests -Dquarkus.package.jar.type=uber-jar
+
+FROM registry.access.redhat.com/ubi9/openjdk-17-runtime:1.20
+
+ARG KUADRANTCTL_VERSION=v0.6.0
+USER root
+RUN microdnf install -y gzip tar && microdnf clean all && \
+    curl -sL "https://github.com/Kuadrant/kuadrantctl/releases/download/${KUADRANTCTL_VERSION}/kuadrantctl-${KUADRANTCTL_VERSION}-linux-amd64.tar.gz" \
+    | tar xzf - -C /usr/local/bin && chmod +x /usr/local/bin/kuadrantctl
+
+ENV LANGUAGE='en_US:en'
+COPY --from=builder /build/target/*-runner.jar /deployments/quarkus-run.jar
+EXPOSE 8080
+USER 185
+ENV JAVA_OPTS_APPEND="-Dquarkus.http.host=0.0.0.0 -Djava.util.logging.manager=org.jboss.logmanager.LogManager"
+ENV JAVA_APP_JAR="/deployments/quarkus-run.jar"
+ENTRYPOINT ["java", "-jar", "/deployments/quarkus-run.jar"]

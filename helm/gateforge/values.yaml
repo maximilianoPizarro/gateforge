@@ -1,0 +1,64 @@
+global:
+  clusterDomain: apps.cluster.example.com
+
+backend:
+  image:
+    repository: quay.io/maximilianopizarro/gateforge-backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 1
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+frontend:
+  image:
+    repository: quay.io/maximilianopizarro/gateforge-frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+ai:
+  enabled: true
+  endpoint: https://litellm-prod.apps.maas.redhatworkshops.io/v1
+  model: deepseek-r1-distill-qwen-14b
+  apiKey: ""
+  temperature: "0.3"
+  maxTokens: "4096"
+
+threescale:
+  adminApi:
+    enabled: true
+    url: ""
+    accessToken: ""
+  crdDiscovery:
+    enabled: true
+    namespace: ""
+
+connectivityLink:
+  targetNamespace: kuadrant-system
+  gatewayStrategy: shared
+  gatewayClassName: istio
+
+kuadrantctl:
+  enabled: true
+
+rbac:
+  clusterAdmin: true
+
+route:
+  enabled: true
+  host: ""
+  tls:
+    termination: edge

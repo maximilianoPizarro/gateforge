@@ -1,0 +1,64 @@
+/* RHDS tokens loaded via CDN */
+
+:root {
+  --gf-primary: #ee0000;
+  --gf-dark: #151515;
+  --gf-surface: #f0f0f0;
+  --gf-white: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Red Hat Text', 'RedHatText', 'Overpass', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: var(--gf-surface);
+  color: var(--gf-dark);
+  line-height: 1.5;
+}
+
+a {
+  color: #06c;
+  text-decoration: none;
+  &:hover { text-decoration: underline; }
+}
+
+.container {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.page-header {
+  background: var(--gf-dark);
+  color: var(--gf-white);
+  padding: 16px 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+
+  .logo {
+    height: 32px;
+    width: auto;
+  }
+
+  h1 {
+    font-family: 'Red Hat Display', sans-serif;
+    font-size: 1.25rem;
+    font-weight: 500;
+  }
+}
+
+.main-content {
+  padding: 32px 0;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 24px;
+  margin: 24px 0;
+}
