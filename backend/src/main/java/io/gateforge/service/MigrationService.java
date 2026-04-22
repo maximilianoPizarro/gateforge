@@ -1,5 +1,7 @@
 package io.gateforge.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.gateforge.model.MigrationPlan;
 import io.gateforge.model.ThreeScaleProduct;
 import io.gateforge.model.AuditEntry;
@@ -8,6 +10,11 @@ import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -21,6 +28,12 @@ public class MigrationService {
     @Inject
     ThreeScaleService threeScaleService;
 
+    @Inject
+    ThreeScaleAdminApiClient adminApiClient;
+
+    @Inject
+    ObjectMapper objectMapper;
+
     @ConfigProperty(name = "gateforge.connectivity-link.gateway-class-name", defaultValue = "istio")
     String gatewayClassName;
 
@@ -29,11 +42,15 @@ public class MigrationService {
 
     private final List<AuditEntry> auditLog = new CopyOnWriteArrayList<>();
     private final Map<String, MigrationPlan> plans = new LinkedHashMap<>();
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(5)).build();
 
     public MigrationPlan analyze(String gatewayStrategy, List<String> productNames) {
         List<ThreeScaleProduct> products = threeScaleService.listProducts().stream()
                 .filter(p -> productNames.isEmpty() || productNames.contains(p.name()))
                 .toList();
+
+        BackendIndex backendEndpoints = resolveBackendEndpoints();
 
         List<MigrationPlan.GeneratedResource> resources = new ArrayList<>();
         String gatewayName;
@@ -61,7 +78,17 @@ public class MigrationService {
                 gatewayName = gwName;
             }
 
-            resources.add(buildHttpRoute(routeName, ns, gatewayName, product));
+            List<ThreeScaleProduct.MappingRule> effectiveRules = product.mappingRules();
+            String backendSvcName = sysName;
+            if (effectiveRules.isEmpty()) {
+                var discovered = discoverPathsFromBackends(product, backendEndpoints);
+                effectiveRules = discovered.rules;
+                if (discovered.serviceName != null) {
+                    backendSvcName = discovered.serviceName;
+                }
+            }
+
+            resources.add(buildHttpRoute(routeName, ns, gatewayName, product, effectiveRules, backendSvcName));
             resources.add(buildAuthPolicy(sysName + "-auth", ns, routeName, product));
             resources.add(buildRateLimitPolicy(sysName + "-ratelimit", ns, routeName, product));
         }
@@ -116,11 +143,13 @@ public class MigrationService {
     }
 
     private MigrationPlan.GeneratedResource buildHttpRoute(
-            String name, String namespace, String gatewayName, ThreeScaleProduct product) {
+            String name, String namespace, String gatewayName,
+            ThreeScaleProduct product, List<ThreeScaleProduct.MappingRule> effectiveRules,
+            String backendSvcName) {
 
         StringBuilder rules = new StringBuilder();
 
-        if (product.mappingRules().isEmpty()) {
+        if (effectiveRules.isEmpty()) {
             rules.append("""
                         - matches:
                             - path:
@@ -129,24 +158,29 @@ public class MigrationService {
                           backendRefs:
                             - name: %s
                               port: 8080
-                      """.formatted(product.systemName()));
+                      """.formatted(backendSvcName));
         } else {
-            Map<String, List<ThreeScaleProduct.MappingRule>> byPath = product.mappingRules().stream()
+            Map<String, List<ThreeScaleProduct.MappingRule>> byPath = effectiveRules.stream()
                     .collect(Collectors.groupingBy(
                             r -> sanitizePath(r.pattern()), LinkedHashMap::new, Collectors.toList()));
 
             for (var entry : byPath.entrySet()) {
                 String path = entry.getKey();
                 List<ThreeScaleProduct.MappingRule> pathRules = entry.getValue();
+                boolean hasParam = path.contains("{");
+                String pathType = hasParam ? "PathPrefix" : "Exact";
+                String pathValue = hasParam ? path.replaceAll("/\\{[^}]+}", "") : path;
+                if (pathValue.isEmpty()) pathValue = "/";
+
                 rules.append("        - matches:\n");
                 for (ThreeScaleProduct.MappingRule rule : pathRules) {
                     rules.append("            - path:\n");
-                    rules.append("                type: Exact\n");
-                    rules.append("                value: ").append(path).append("\n");
+                    rules.append("                type: ").append(pathType).append("\n");
+                    rules.append("                value: ").append(pathValue).append("\n");
                     rules.append("              method: ").append(rule.httpMethod().toUpperCase()).append("\n");
                 }
                 rules.append("          backendRefs:\n");
-                rules.append("            - name: ").append(product.systemName()).append("\n");
+                rules.append("            - name: ").append(backendSvcName).append("\n");
                 rules.append("              port: 8080\n");
             }
         }
@@ -261,6 +295,145 @@ public class MigrationService {
                 """.formatted(name, namespace, product.systemName(), routeName);
 
         return new MigrationPlan.GeneratedResource("RateLimitPolicy", name, namespace, yaml);
+    }
+
+    private record BackendIndex(Map<Long, String> byId, Map<String, String> byName) {}
+    private record DiscoveredPaths(List<ThreeScaleProduct.MappingRule> rules, String serviceName) {}
+
+    private DiscoveredPaths discoverPathsFromBackends(
+            ThreeScaleProduct product, BackendIndex backends) {
+
+        for (ThreeScaleProduct.BackendUsage usage : product.backendUsages()) {
+            String endpoint = null;
+
+            long backendId = extractBackendId(usage.backendName());
+            if (backendId > 0) {
+                endpoint = backends.byId.get(backendId);
+            }
+            if (endpoint == null) {
+                endpoint = backends.byName.get(usage.backendName());
+            }
+            if (endpoint == null || endpoint.isBlank()) continue;
+
+            String svcName = extractServiceName(endpoint);
+            List<ThreeScaleProduct.MappingRule> rules = fetchOpenApiPaths(endpoint);
+            if (!rules.isEmpty()) {
+                LOG.infof("Discovered %d paths from backend %s for product %s",
+                        rules.size(), endpoint, product.systemName());
+                return new DiscoveredPaths(rules, svcName);
+            }
+        }
+        return new DiscoveredPaths(List.of(), null);
+    }
+
+    private BackendIndex resolveBackendEndpoints() {
+        Map<Long, String> byId = new HashMap<>();
+        Map<String, String> byName = new HashMap<>();
+        if (!adminApiClient.isConfigured()) return new BackendIndex(byId, byName);
+        try {
+            List<Map<String, Object>> backends = adminApiClient.listBackendApis();
+            for (Map<String, Object> b : backends) {
+                String ep = String.valueOf(b.getOrDefault("private_endpoint", ""));
+                if (ep.isBlank()) continue;
+
+                Object idObj = b.get("id");
+                long id = idObj instanceof Number n ? n.longValue() : 0L;
+                if (id > 0) byId.put(id, ep);
+
+                String sysName = String.valueOf(b.getOrDefault("system_name", ""));
+                if (!sysName.isBlank()) byName.put(sysName, ep);
+
+                String name = String.valueOf(b.getOrDefault("name", ""));
+                if (!name.isBlank()) byName.put(name, ep);
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to resolve backend endpoints", e);
+        }
+        return new BackendIndex(byId, byName);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<ThreeScaleProduct.MappingRule> fetchOpenApiPaths(String baseUrl) {
+        for (String suffix : List.of("/q/openapi", "/openapi.json", "/openapi", "/swagger.json")) {
+            try {
+                String url = baseUrl.endsWith("/")
+                        ? baseUrl.substring(0, baseUrl.length() - 1) + suffix
+                        : baseUrl + suffix;
+
+                HttpRequest req = HttpRequest.newBuilder()
+                        .uri(URI.create(url))
+                        .timeout(Duration.ofSeconds(5))
+                        .header("Accept", "application/json")
+                        .GET().build();
+
+                HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+                if (resp.statusCode() != 200) continue;
+
+                String body = resp.body().trim();
+                JsonNode root;
+                if (body.startsWith("{")) {
+                    root = objectMapper.readTree(body);
+                } else {
+                    org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml();
+                    Map<String, Object> map = yaml.load(body);
+                    root = objectMapper.valueToTree(map);
+                }
+
+                JsonNode paths = root.get("paths");
+                if (paths == null || !paths.isObject()) continue;
+
+                List<ThreeScaleProduct.MappingRule> rules = new ArrayList<>();
+                var fields = paths.fields();
+                while (fields.hasNext()) {
+                    var entry = fields.next();
+                    String path = entry.getKey();
+                    if (path.equals("/")) continue;
+                    JsonNode methods = entry.getValue();
+                    var methodFields = methods.fields();
+                    while (methodFields.hasNext()) {
+                        var mEntry = methodFields.next();
+                        String method = mEntry.getKey().toUpperCase();
+                        if (Set.of("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS").contains(method)) {
+                            String opId = "";
+                            JsonNode opNode = mEntry.getValue();
+                            if (opNode.has("operationId")) {
+                                opId = opNode.get("operationId").asText();
+                            }
+                            rules.add(new ThreeScaleProduct.MappingRule(method, path, opId, 1));
+                        }
+                    }
+                }
+                if (!rules.isEmpty()) return rules;
+
+            } catch (Exception e) {
+                LOG.debugf("OpenAPI fetch failed for %s: %s", baseUrl + suffix, e.getMessage());
+            }
+        }
+        return List.of();
+    }
+
+    private String extractServiceName(String endpoint) {
+        try {
+            URI uri = URI.create(endpoint);
+            String host = uri.getHost();
+            if (host != null && host.contains(".")) {
+                return host.substring(0, host.indexOf('.'));
+            }
+            return host != null ? host : "";
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private long extractBackendId(String backendName) {
+        if (backendName != null && backendName.startsWith("backend-")) {
+            try {
+                return Long.parseLong(backendName.substring("backend-".length()));
+            } catch (NumberFormatException e) {
+                return 0L;
+            }
+        }
+        return 0L;
     }
 
     private String sanitizePath(String pattern) {
