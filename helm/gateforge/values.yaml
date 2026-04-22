@@ -46,6 +46,12 @@ threescale:
     enabled: true
     namespace: ""
 
+clusterDomain: apps.cluster.example.com
+
+developerHub:
+  enabled: false
+  url: ""
+
 connectivityLink:
   targetNamespace: kuadrant-system
   gatewayStrategy: shared
@@ -55,7 +61,7 @@ kuadrantctl:
   enabled: true
 
 rbac:
-  clusterAdmin: true
+  clusterAdmin: false
 
 route:
   enabled: true

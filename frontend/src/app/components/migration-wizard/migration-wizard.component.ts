@@ -2,7 +2,7 @@ import { Component, CUSTOM_ELEMENTS_SCHEMA, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult } from '../../services/api.service';
+import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult, FeatureFlags, BulkRevertResult, TestCommand } from '../../services/api.service';
 
 @Component({
   selector: 'app-migration-wizard',
@@ -69,10 +69,10 @@ import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult } from '../..
             <div class="select-body">
               <div class="select-title-row">
                 <span class="product-name">{{ p.product.name }}</span>
-                <span class="badge badge-ns">{{ p.product.namespace }}</span>
+                <span class="badge badge-ns">{{ p.product.backendNamespace || p.product.namespace }}</span>
               </div>
               <div class="select-stats">
-                <span class="pill">{{ p.product.mappingRules.length }} rules</span>
+                <span class="pill" *ngIf="p.product.backendServiceName">{{ p.product.backendServiceName }}</span>
                 <span class="pill pill-green">{{ p.product.backendUsages.length }} backends</span>
               </div>
             </div>
@@ -157,11 +157,120 @@ import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult } from '../..
           </div>
         </div>
 
+        <div *ngIf="developerHubEnabled && plan.catalogInfoYaml" class="catalog-info-section">
+          <div class="catalog-info-header">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <h3>Developer Hub Integration</h3>
+              <a *ngIf="developerHubUrl" [href]="developerHubUrl" target="_blank" class="btn-devhub-link">Open Developer Hub</a>
+            </div>
+            <p>Register this <code>catalog-info.yaml</code> in Developer Hub to see your migrated APIs in the catalog with Kuadrant plugin support.</p>
+          </div>
+          <div class="catalog-info-yaml">
+            <div class="yaml-toolbar">
+              <span class="badge badge-kind">catalog-info.yaml</span>
+              <button type="button" class="btn-copy" (click)="copyCatalogInfo()">
+                {{ catalogCopied ? 'Copied!' : 'Copy' }}
+              </button>
+            </div>
+            <pre><code>{{ plan.catalogInfoYaml }}</code></pre>
+          </div>
+        </div>
+
+        <div *ngIf="revertResult" class="apply-result" [class.success]="revertResult.failed === 0" [class.partial]="revertResult.failed > 0">
+          <div class="apply-summary">
+            <strong *ngIf="revertResult.failed === 0">Migration reverted successfully!</strong>
+            <strong *ngIf="revertResult.failed > 0">Revert completed with errors</strong>
+            <span class="apply-counts">
+              {{ revertResult.applied }} deleted, {{ revertResult.failed }} failed
+            </span>
+          </div>
+          <div class="apply-details">
+            <div *ngFor="let r of revertResult.results" class="apply-row" [class.err]="!r.success">
+              <span class="badge badge-kind">{{ r.kind }}</span>
+              <span class="apply-name">{{ r.name }}</span>
+              <span class="apply-status" [class.ok]="r.success" [class.fail]="!r.success">
+                {{ r.success ? r.message : r.message }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div *ngIf="testCommands.length > 0" class="test-section">
+          <h3>Test your migration</h3>
+          <p class="step-desc">Use these commands to verify your APIs work through Connectivity Link.</p>
+          <div class="test-commands">
+            <div *ngFor="let cmd of testCommands" class="test-cmd-row">
+              <div class="test-cmd-label">
+                <span class="pill" [class.pill-green]="cmd.type === 'api-key'" [class.pill-url]="cmd.type === 'url'">{{ cmd.type }}</span>
+                <span>{{ cmd.label }}</span>
+              </div>
+              <div class="test-cmd-code">
+                <code *ngIf="cmd.type !== 'url'">{{ cmd.command }}</code>
+                <a *ngIf="cmd.type === 'url'" [href]="cmd.command" target="_blank">{{ cmd.command }}</a>
+                <button type="button" class="btn-copy-sm" (click)="copyCommand(cmd.command)">Copy</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="actions">
           <button type="button" class="btn-secondary" (click)="step = 2">Back</button>
-          <button type="button" class="btn-apply" (click)="applyMigration()" [disabled]="applying || !!applyResult">
+          <button type="button" class="btn-apply" (click)="applyMigration()" [disabled]="applying || !!applyResult || !!revertResult">
             {{ applying ? 'Applying…' : (applyResult ? 'Applied' : 'Apply to Cluster') }}
           </button>
+          <button type="button" class="btn-revert" (click)="revertMigration()" [disabled]="reverting || !applyResult || !!revertResult"
+                  *ngIf="applyResult">
+            {{ reverting ? 'Reverting…' : (revertResult ? 'Reverted' : 'Revert Migration') }}
+          </button>
+        </div>
+      </div>
+
+      <div class="history-section">
+        <div class="history-header" (click)="toggleHistory()">
+          <h2>Migration History / Volver a 3scale</h2>
+          <span class="chevron" [class.open]="historyOpen">⌄</span>
+        </div>
+        <div *ngIf="historyOpen" class="history-body">
+          <div *ngIf="historyLoading" class="loading-text">Loading migration plans…</div>
+          <div *ngIf="!historyLoading && allPlans.length === 0" class="empty-inline card">
+            <p>No migration plans found. Create one using the wizard above.</p>
+          </div>
+          <div *ngIf="!historyLoading && allPlans.length > 0">
+            <div class="history-toolbar">
+              <label class="select-all-label">
+                <input type="checkbox" [checked]="allSelected" (change)="toggleSelectAll()">
+                Select All
+              </label>
+              <label class="delete-gw-label">
+                <input type="checkbox" [(ngModel)]="deleteGateway">
+                Also delete shared Gateway
+              </label>
+              <button type="button" class="btn-bulk-revert"
+                      (click)="confirmBulkRevert()"
+                      [disabled]="selectedPlanIds.length === 0 || bulkReverting">
+                {{ bulkReverting ? 'Reverting…' : 'Volver a 3scale (' + selectedPlanIds.length + ')' }}
+              </button>
+            </div>
+            <div class="history-list">
+              <div *ngFor="let p of allPlans" class="history-row card" [class.reverted]="p.status === 'REVERTED'">
+                <input type="checkbox" [checked]="planSelection[p.id]" (change)="togglePlanSelection(p.id)"
+                       [disabled]="p.status === 'REVERTED'">
+                <div class="history-info">
+                  <span class="history-id">{{ p.id }}</span>
+                  <span class="pill pill-strategy">{{ p.gatewayStrategy }}</span>
+                  <span class="pill pill-muted">{{ p.sourceProducts.join(', ') }}</span>
+                </div>
+                <span class="badge" [class.badge-active]="p.status === 'ACTIVE'" [class.badge-reverted]="p.status === 'REVERTED'">
+                  {{ p.status || 'ACTIVE' }}
+                </span>
+              </div>
+            </div>
+            <div *ngIf="bulkResult" class="apply-result" [class.success]="bulkResult.totalFailed === 0" [class.partial]="bulkResult.totalFailed > 0">
+              <div class="apply-summary">
+                <strong>Bulk revert: {{ bulkResult.totalReverted }} reverted, {{ bulkResult.totalFailed }} failed</strong>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -486,6 +595,13 @@ import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult } from '../..
     }
     .btn-apply:hover:not(:disabled) { background: #2d6b24; }
     .btn-apply:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-revert {
+      padding: 10px 22px; border-radius: 6px; font-weight: 600; cursor: pointer;
+      border: none; font-family: inherit; font-size: 0.95rem;
+      background: #c9190b; color: white;
+    }
+    .btn-revert:hover:not(:disabled) { background: #a30000; }
+    .btn-revert:disabled { opacity: 0.5; cursor: not-allowed; }
     .actions { display: flex; gap: 12px; flex-wrap: wrap; }
     .btn-primary, .btn-secondary {
       padding: 10px 22px;
@@ -530,6 +646,123 @@ import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult } from '../..
     }
     .skeleton-line.long { width: 75%; }
     .skeleton-line.short { width: 42%; }
+
+    .catalog-info-section {
+      margin-top: 32px;
+      border: 2px solid #0066cc;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .catalog-info-header {
+      background: linear-gradient(135deg, #0066cc 0%, #004080 100%);
+      padding: 20px 24px;
+      color: white;
+    }
+    .catalog-info-header h3 {
+      margin: 0 0 6px; font-size: 1.1rem; font-weight: 700;
+    }
+    .catalog-info-header p {
+      margin: 0; font-size: 0.85rem; color: #cce0ff;
+    }
+    .catalog-info-header code {
+      background: rgba(255,255,255,0.2); padding: 1px 6px; border-radius: 4px;
+      font-size: 0.85rem;
+    }
+    .catalog-info-yaml {
+      background: #1e1e1e; padding: 0;
+    }
+    .yaml-toolbar {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 16px; border-bottom: 1px solid #333;
+    }
+    .yaml-toolbar .badge-kind {
+      background: #0066cc; color: white;
+    }
+    .btn-copy {
+      padding: 5px 14px; border-radius: 4px; font-size: 0.8rem;
+      font-weight: 600; cursor: pointer;
+      background: #3f9c35; color: white; border: none;
+    }
+    .btn-copy:hover { background: #2d6b24; }
+    .catalog-info-yaml pre {
+      margin: 0; padding: 16px; overflow-x: auto;
+      font-size: 0.8rem; line-height: 1.5;
+    }
+    .catalog-info-yaml code {
+      color: #d4d4d4; font-family: 'Red Hat Mono', monospace;
+    }
+    .btn-devhub-link {
+      padding: 6px 16px; border-radius: 4px; font-size: 0.85rem; font-weight: 600;
+      background: white; color: #0066cc; text-decoration: none;
+      border: 1px solid rgba(255,255,255,0.3);
+    }
+    .btn-devhub-link:hover { background: #e0ecff; }
+
+    .test-section {
+      margin-top: 28px; padding: 20px 24px; background: #f0f7ff;
+      border: 1px solid rgba(0,102,204,0.25); border-radius: 8px;
+    }
+    .test-section h3 { margin: 0 0 4px; font-size: 1.1rem; color: #151515; }
+    .test-commands { display: flex; flex-direction: column; gap: 10px; }
+    .test-cmd-row {
+      background: white; border: 1px solid #d2d2d2; border-radius: 6px;
+      padding: 12px 16px;
+    }
+    .test-cmd-label {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+      font-size: 0.88rem; font-weight: 500; color: #151515;
+    }
+    .test-cmd-code {
+      display: flex; align-items: center; gap: 8px;
+      background: #1e1e1e; padding: 8px 12px; border-radius: 4px;
+    }
+    .test-cmd-code code {
+      flex: 1; color: #d4d4d4; font-size: 0.82rem; word-break: break-all;
+      font-family: 'Red Hat Mono', monospace;
+    }
+    .test-cmd-code a {
+      flex: 1; color: #4fc3f7; font-size: 0.82rem; word-break: break-all;
+    }
+    .pill-url { background: #e0ecff; border-color: #0066cc; color: #0066cc; }
+    .btn-copy-sm {
+      padding: 3px 10px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;
+      cursor: pointer; background: #3f9c35; color: white; border: none; white-space: nowrap;
+    }
+    .btn-copy-sm:hover { background: #2d6b24; }
+
+    .history-section {
+      margin-top: 40px; border: 1px solid #d2d2d2; border-radius: 8px; overflow: hidden;
+    }
+    .history-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; cursor: pointer; background: #fafafa;
+    }
+    .history-header:hover { background: #f0f0f0; }
+    .history-header h2 { margin: 0; font-size: 1.15rem; }
+    .history-body { padding: 16px 20px; }
+    .history-toolbar {
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+      margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid #e8e8e8;
+    }
+    .select-all-label, .delete-gw-label {
+      display: flex; align-items: center; gap: 6px; font-size: 0.88rem; cursor: pointer;
+    }
+    .btn-bulk-revert {
+      margin-left: auto; padding: 8px 20px; border-radius: 6px; font-weight: 600;
+      cursor: pointer; border: none; font-family: inherit; font-size: 0.9rem;
+      background: #c9190b; color: white;
+    }
+    .btn-bulk-revert:hover:not(:disabled) { background: #a30000; }
+    .btn-bulk-revert:disabled { opacity: 0.5; cursor: not-allowed; }
+    .history-list { display: flex; flex-direction: column; gap: 8px; }
+    .history-row {
+      display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+    }
+    .history-row.reverted { opacity: 0.6; }
+    .history-info { flex: 1; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .history-id { font-weight: 600; font-family: 'Red Hat Mono', monospace; font-size: 0.88rem; }
+    .badge-active { background: #e6f5e0; color: #2d6b24; }
+    .badge-reverted { background: #f5f5f5; color: #6a6e73; }
   `]
 })
 export class MigrationWizardComponent implements OnInit {
@@ -543,6 +776,19 @@ export class MigrationWizardComponent implements OnInit {
   yamlOpen: Record<number, boolean> = {};
   applying = false;
   applyResult: ApplyResult | null = null;
+  reverting = false;
+  revertResult: ApplyResult | null = null;
+  catalogCopied = false;
+  developerHubEnabled = false;
+  developerHubUrl = '';
+  testCommands: TestCommand[] = [];
+  historyOpen = false;
+  historyLoading = false;
+  allPlans: MigrationPlan[] = [];
+  planSelection: Record<string, boolean> = {};
+  deleteGateway = false;
+  bulkReverting = false;
+  bulkResult: BulkRevertResult | null = null;
 
   strategies = [
     {
@@ -581,11 +827,18 @@ export class MigrationWizardComponent implements OnInit {
         this.productsLoading = false;
       }
     });
+    this.api.getFeatures().subscribe({
+      next: (f) => {
+        this.developerHubEnabled = f.developerHub?.enabled ?? false;
+        this.developerHubUrl = f.developerHub?.url ?? '';
+      }
+    });
   }
 
   analyze(): void {
     this.analyzing = true;
     this.applyResult = null;
+    this.revertResult = null;
     const selected = this.products.filter(p => p.selected).map(p => p.product.name);
     this.api.analyzeMigration(this.gatewayStrategy, selected).subscribe({
       next: (plan) => {
@@ -607,6 +860,7 @@ export class MigrationWizardComponent implements OnInit {
       next: (result) => {
         this.applyResult = result;
         this.applying = false;
+        this.loadTestCommands();
       },
       error: () => {
         this.applyResult = { planId: this.plan!.id, applied: 0, failed: 1, results: [
@@ -617,7 +871,100 @@ export class MigrationWizardComponent implements OnInit {
     });
   }
 
+  revertMigration(): void {
+    if (!this.plan) return;
+    this.reverting = true;
+    this.api.revertPlan(this.plan.id).subscribe({
+      next: (result) => {
+        this.revertResult = result;
+        this.reverting = false;
+      },
+      error: () => {
+        this.revertResult = { planId: this.plan!.id, applied: 0, failed: 1, results: [
+          { kind: 'Error', name: 'Revert failed', namespace: '', success: false, message: 'Backend communication error' }
+        ]};
+        this.reverting = false;
+      }
+    });
+  }
+
   toggleYaml(idx: number): void {
     this.yamlOpen = { ...this.yamlOpen, [idx]: !this.yamlOpen[idx] };
+  }
+
+  copyCatalogInfo(): void {
+    if (!this.plan?.catalogInfoYaml) return;
+    navigator.clipboard.writeText(this.plan.catalogInfoYaml).then(() => {
+      this.catalogCopied = true;
+      setTimeout(() => this.catalogCopied = false, 2000);
+    });
+  }
+
+  copyCommand(cmd: string): void {
+    navigator.clipboard.writeText(cmd);
+  }
+
+  loadTestCommands(): void {
+    if (!this.plan) return;
+    this.api.getTestCommands(this.plan.id).subscribe({
+      next: (cmds) => this.testCommands = cmds,
+      error: () => this.testCommands = []
+    });
+  }
+
+  toggleHistory(): void {
+    this.historyOpen = !this.historyOpen;
+    if (this.historyOpen && this.allPlans.length === 0) {
+      this.historyLoading = true;
+      this.api.getPlans().subscribe({
+        next: (plans) => {
+          this.allPlans = plans;
+          this.historyLoading = false;
+        },
+        error: () => this.historyLoading = false
+      });
+    }
+  }
+
+  get selectedPlanIds(): string[] {
+    return Object.entries(this.planSelection)
+      .filter(([, v]) => v)
+      .map(([k]) => k);
+  }
+
+  get allSelected(): boolean {
+    const active = this.allPlans.filter(p => p.status !== 'REVERTED');
+    return active.length > 0 && active.every(p => this.planSelection[p.id]);
+  }
+
+  toggleSelectAll(): void {
+    const allSel = this.allSelected;
+    this.allPlans.filter(p => p.status !== 'REVERTED').forEach(p => {
+      this.planSelection[p.id] = !allSel;
+    });
+  }
+
+  togglePlanSelection(id: string): void {
+    this.planSelection = { ...this.planSelection, [id]: !this.planSelection[id] };
+  }
+
+  confirmBulkRevert(): void {
+    const count = this.selectedPlanIds.length;
+    if (!confirm(`This will delete Connectivity Link resources for ${count} plan(s). 3scale will resume routing. Continue?`)) return;
+    this.bulkReverting = true;
+    this.bulkResult = null;
+    this.api.revertBulk(this.selectedPlanIds, this.deleteGateway).subscribe({
+      next: (result) => {
+        this.bulkResult = result;
+        this.bulkReverting = false;
+        this.allPlans = this.allPlans.map(p =>
+          this.selectedPlanIds.includes(p.id) ? { ...p, status: 'REVERTED' } : p
+        );
+        this.planSelection = {};
+      },
+      error: () => {
+        this.bulkReverting = false;
+      }
+    });
   }
 }

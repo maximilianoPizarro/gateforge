@@ -9,7 +9,9 @@ public record MigrationPlan(
     List<String> sourceProducts,
     List<GeneratedResource> resources,
     String aiAnalysis,
-    Instant createdAt
+    Instant createdAt,
+    String catalogInfoYaml,
+    String status
 ) {
     public record GeneratedResource(String kind, String name, String namespace, String yaml) {}
 }

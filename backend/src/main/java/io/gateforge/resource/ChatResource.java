@@ -25,7 +25,18 @@ public class ChatResource {
     public ChatMessage chat(ChatMessage userMessage) {
         String contextEnriched = buildContextMessage(userMessage.content());
         String response = migrationAgent.chat(contextEnriched);
+        response = cleanThinkingBlocks(response);
         return new ChatMessage("assistant", response);
+    }
+
+    private String cleanThinkingBlocks(String text) {
+        if (text == null) return "";
+        String cleaned = text.replaceAll("(?s)<think>.*?</think>\\s*", "");
+        int closeIdx = cleaned.indexOf("</think>");
+        if (closeIdx >= 0) {
+            cleaned = cleaned.substring(closeIdx + "</think>".length());
+        }
+        return cleaned.trim();
     }
 
     @GET

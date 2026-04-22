@@ -46,6 +46,12 @@ spec:
               value: {{ .Values.connectivityLink.gatewayStrategy | quote }}
             - name: CL_GATEWAY_CLASS
               value: {{ .Values.connectivityLink.gatewayClassName | quote }}
+            - name: CLUSTER_DOMAIN
+              value: {{ .Values.clusterDomain | quote }}
+            - name: DEVELOPER_HUB_ENABLED
+              value: {{ .Values.developerHub.enabled | default false | quote }}
+            - name: DEVELOPER_HUB_URL
+              value: {{ .Values.developerHub.url | default "" | quote }}
           resources:
             {{- toYaml .Values.backend.resources | nindent 12 }}
           readinessProbe:

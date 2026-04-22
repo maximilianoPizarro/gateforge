@@ -13,4 +13,81 @@ subjects:
   - kind: ServiceAccount
     name: {{ include "gateforge.fullname" . }}-backend
     namespace: {{ .Release.Namespace }}
+{{- else }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "gateforge.fullname" . }}-reader
+  labels:
+    {{- include "gateforge.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [services]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get, list]
+  - apiGroups: [capabilities.3scale.net]
+    resources: [products, backends, activedocs]
+    verbs: [get, list]
+  - apiGroups: [apps.3scale.net]
+    resources: [apimanagers]
+    verbs: [list]
+  - apiGroups: [kuadrant.io]
+    resources: [authpolicies, ratelimitpolicies, kuadrants]
+    verbs: [get, list]
+  - apiGroups: [gateway.networking.k8s.io]
+    resources: [gateways, httproutes]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "gateforge.fullname" . }}-reader
+  labels:
+    {{- include "gateforge.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "gateforge.fullname" . }}-reader
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "gateforge.fullname" . }}-backend
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "gateforge.fullname" . }}-migrator
+  labels:
+    {{- include "gateforge.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [gateway.networking.k8s.io]
+    resources: [gateways, httproutes]
+    verbs: [get, list, create, update, patch, delete]
+  - apiGroups: [kuadrant.io]
+    resources: [authpolicies, ratelimitpolicies]
+    verbs: [get, list, create, update, patch, delete]
+  - apiGroups: [route.openshift.io]
+    resources: [routes]
+    verbs: [get, list, create, update, patch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "gateforge.fullname" . }}-migrator
+  labels:
+    {{- include "gateforge.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "gateforge.fullname" . }}-migrator
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "gateforge.fullname" . }}-backend
+    namespace: {{ .Release.Namespace }}
 {{- end }}

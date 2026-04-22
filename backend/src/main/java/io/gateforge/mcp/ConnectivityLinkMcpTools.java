@@ -8,8 +8,13 @@ import jakarta.inject.Inject;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Set;
 
 public class ConnectivityLinkMcpTools {
+
+    private static final Set<String> ALLOWED_KINDS = Set.of(
+            "Gateway", "HTTPRoute", "AuthPolicy", "RateLimitPolicy", "Route"
+    );
 
     @Inject
     KubernetesClient kubernetesClient;
@@ -17,12 +22,18 @@ public class ConnectivityLinkMcpTools {
     @Inject
     KuadrantCtlService kuadrantCtlService;
 
-    @Tool(description = "Apply a Kubernetes/Kuadrant YAML resource to the cluster")
+    @Tool(description = "Apply a Kubernetes/Kuadrant YAML resource to the cluster. Only Gateway, HTTPRoute, AuthPolicy, RateLimitPolicy, and Route kinds are allowed.")
     public String applyResource(
             @ToolArg(description = "YAML content of the resource to apply") String yaml) {
         try {
             var resources = kubernetesClient.load(
                     new ByteArrayInputStream(yaml.getBytes(StandardCharsets.UTF_8))).items();
+            for (var res : resources) {
+                if (!ALLOWED_KINDS.contains(res.getKind())) {
+                    return "Rejected: kind '%s' is not allowed. Only %s can be applied."
+                            .formatted(res.getKind(), ALLOWED_KINDS);
+                }
+            }
             var result = kubernetesClient.resourceList(resources).createOrReplace();
             return "Applied %d resource(s) successfully.".formatted(result.size());
         } catch (Exception e) {

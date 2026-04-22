@@ -40,6 +40,15 @@ public class MigrationService {
     @ConfigProperty(name = "gateforge.connectivity-link.target-namespace", defaultValue = "kuadrant-system")
     String gatewayNamespace;
 
+    @ConfigProperty(name = "gateforge.cluster-domain", defaultValue = "apps.cluster.example.com")
+    String clusterDomain;
+
+    @ConfigProperty(name = "gateforge.developer-hub.enabled", defaultValue = "false")
+    boolean developerHubEnabled;
+
+    @ConfigProperty(name = "gateforge.developer-hub.url", defaultValue = "none")
+    String developerHubUrl;
+
     private final List<AuditEntry> auditLog = new CopyOnWriteArrayList<>();
     private final Map<String, MigrationPlan> plans = new LinkedHashMap<>();
     private final HttpClient httpClient = HttpClient.newBuilder()
@@ -92,20 +101,26 @@ public class MigrationService {
             }
 
             if (ns == null || ns.isBlank()) {
-                ns = product.namespace() != null && !product.namespace().isBlank()
-                        ? product.namespace() : gatewayNamespace;
+                ns = product.backendNamespace();
+            }
+            if (ns == null || ns.isBlank()) {
+                ns = gatewayNamespace;
             }
 
             resources.add(buildHttpRoute(routeName, ns, gatewayName, product, effectiveRules, backendSvcName));
             resources.add(buildAuthPolicy(sysName + "-auth", ns, routeName, product));
             resources.add(buildRateLimitPolicy(sysName + "-ratelimit", ns, routeName, product));
+            resources.add(buildOpenShiftRoute(sysName, gatewayName));
         }
+
+        String catalogInfo = developerHubEnabled ? buildCatalogInfo(products, gatewayStrategy) : null;
 
         String planId = UUID.randomUUID().toString().substring(0, 8);
         MigrationPlan plan = new MigrationPlan(
                 planId, gatewayStrategy,
                 products.stream().map(ThreeScaleProduct::name).toList(),
-                resources, "AI analysis pending", Instant.now()
+                resources, "AI analysis pending", Instant.now(),
+                catalogInfo, "ACTIVE"
         );
         plans.put(planId, plan);
         return plan;
@@ -127,6 +142,120 @@ public class MigrationService {
         auditLog.add(entry);
     }
 
+    public void updatePlanStatus(String planId, String status) {
+        MigrationPlan existing = plans.get(planId);
+        if (existing != null) {
+            plans.put(planId, new MigrationPlan(
+                    existing.id(), existing.gatewayStrategy(), existing.sourceProducts(),
+                    existing.resources(), existing.aiAnalysis(), existing.createdAt(),
+                    existing.catalogInfoYaml(), status
+            ));
+        }
+    }
+
+    public List<Map<String, String>> generateTestCommands(String planId) {
+        MigrationPlan plan = plans.get(planId);
+        if (plan == null) return List.of();
+
+        List<Map<String, String>> commands = new ArrayList<>();
+        String gatewayHost = null;
+
+        for (MigrationPlan.GeneratedResource res : plan.resources()) {
+            if ("Route".equals(res.kind()) && res.yaml().contains("host:")) {
+                String yaml = res.yaml();
+                int idx = yaml.indexOf("host:");
+                if (idx >= 0) {
+                    String rest = yaml.substring(idx + 5).trim();
+                    String host = rest.split("\\s")[0].trim();
+                    gatewayHost = host;
+
+                    commands.add(Map.of(
+                            "label", "Test " + res.name() + " (no auth — expect 401/403)",
+                            "command", "curl -sk https://" + host + "/",
+                            "type", "no-auth"
+                    ));
+                    commands.add(Map.of(
+                            "label", "Test " + res.name() + " with API Key",
+                            "command", "curl -sk -H \"X-API-Key: YOUR_API_KEY\" https://" + host + "/api/v1/",
+                            "type", "api-key"
+                    ));
+                    commands.add(Map.of(
+                            "label", "Swagger UI",
+                            "command", "https://" + host + "/q/swagger-ui",
+                            "type", "url"
+                    ));
+                    commands.add(Map.of(
+                            "label", "OpenAPI Spec",
+                            "command", "https://" + host + "/q/openapi",
+                            "type", "url"
+                    ));
+                }
+            }
+        }
+        return commands;
+    }
+
+    private String buildCatalogInfo(List<ThreeScaleProduct> products, String strategy) {
+        StringBuilder sb = new StringBuilder();
+        String gatewayName = "dedicated".equals(strategy) ? null :
+                "dual".equals(strategy) ? "gateforge-external" : "gateforge-shared";
+
+        for (int i = 0; i < products.size(); i++) {
+            ThreeScaleProduct p = products.get(i);
+            String sysName = p.systemName();
+            String ns = p.backendNamespace() != null && !p.backendNamespace().isBlank()
+                    ? p.backendNamespace() : gatewayNamespace;
+            String routeName = sysName + "-route";
+            String gw = "dedicated".equals(strategy) ? sysName + "-gw" : gatewayName;
+
+            if (i > 0) sb.append("\n---\n");
+
+            sb.append("""
+                    apiVersion: backstage.io/v1alpha1
+                    kind: API
+                    metadata:
+                      name: %s
+                      namespace: default
+                      description: "%s — migrated from 3scale to Connectivity Link by GateForge"
+                      annotations:
+                        kuadrant.io/namespace: %s
+                        kuadrant.io/httproute: %s
+                        backstage.io/kubernetes-namespace: %s
+                      tags:
+                        - connectivity-link
+                        - kuadrant
+                        - gateforge-migrated
+                        - gateway-api
+                    spec:
+                      type: openapi
+                      lifecycle: production
+                      owner: platform-engineering
+                      definition: |
+                        openapi: "3.0.3"
+                        info:
+                          title: %s
+                          description: "API migrated from 3scale by GateForge"
+                          version: "1.0.0"
+                        servers:
+                          - url: https://%s
+                            description: "Connectivity Link Gateway"
+                        paths:
+                          /:
+                            get:
+                              summary: Root endpoint
+                              responses:
+                                '200':
+                                  description: OK
+                    """.formatted(
+                    sysName, p.description() != null ? p.description().replace("\"", "'") : sysName,
+                    ns, routeName, ns,
+                    p.name(),
+                    gw != null ? gw + "." + clusterDomain : sysName + "." + clusterDomain
+            ));
+        }
+        return sb.toString();
+    }
+
     private MigrationPlan.GeneratedResource buildGatewayResource(String name, String label) {
         String yaml = """
                 apiVersion: gateway.networking.k8s.io/v1
@@ -134,6 +263,8 @@ public class MigrationService {
                 metadata:
                   name: %s
                   namespace: %s
+                  annotations:
+                    networking.istio.io/service-type: ClusterIP
                   labels:
                     gateforge.io/type: %s
                     app.kubernetes.io/managed-by: gateforge
@@ -143,11 +274,38 @@ public class MigrationService {
                     - name: http
                       port: 80
                       protocol: HTTP
+                      hostname: "*.%s"
                       allowedRoutes:
                         namespaces:
                           from: All
-                """.formatted(name, gatewayNamespace, label, gatewayClassName);
+                """.formatted(name, gatewayNamespace, label, gatewayClassName, clusterDomain);
         return new MigrationPlan.GeneratedResource("Gateway", name, gatewayNamespace, yaml);
+    }
+
+    private MigrationPlan.GeneratedResource buildOpenShiftRoute(String sysName, String gatewayName) {
+        String hostname = sysName + "." + clusterDomain;
+        String svcName = gatewayName + "-istio";
+        String yaml = """
+                apiVersion: route.openshift.io/v1
+                kind: Route
+                metadata:
+                  name: %s
+                  namespace: %s
+                  labels:
+                    app.kubernetes.io/managed-by: gateforge
+                spec:
+                  host: %s
+                  to:
+                    kind: Service
+                    name: %s
+                    weight: 100
+                  port:
+                    targetPort: http
+                  tls:
+                    termination: edge
+                    insecureEdgeTerminationPolicy: Redirect
+                """.formatted(sysName, gatewayNamespace, hostname, svcName);
+        return new MigrationPlan.GeneratedResource("Route", sysName, gatewayNamespace, yaml);
     }
 
     private MigrationPlan.GeneratedResource buildHttpRoute(
@@ -168,30 +326,31 @@ public class MigrationService {
                               port: 8080
                       """.formatted(backendSvcName));
         } else {
-            Map<String, List<ThreeScaleProduct.MappingRule>> byPath = effectiveRules.stream()
-                    .collect(Collectors.groupingBy(
-                            r -> sanitizePath(r.pattern()), LinkedHashMap::new, Collectors.toList()));
+            Set<String> prefixes = new LinkedHashSet<>();
+            for (ThreeScaleProduct.MappingRule r : effectiveRules) {
+                String p = sanitizePath(r.pattern());
+                if (p.contains("{")) p = p.replaceAll("/\\{[^}]+}.*", "");
+                String[] segments = p.split("/");
+                String prefix = segments.length >= 2 ? "/" + segments[1] : "/";
+                prefixes.add(prefix);
+            }
 
-            for (var entry : byPath.entrySet()) {
-                String path = entry.getKey();
-                List<ThreeScaleProduct.MappingRule> pathRules = entry.getValue();
-                boolean hasParam = path.contains("{");
-                String pathType = hasParam ? "PathPrefix" : "Exact";
-                String pathValue = hasParam ? path.replaceAll("/\\{[^}]+}", "") : path;
-                if (pathValue.isEmpty()) pathValue = "/";
+            if (prefixes.size() > 16) {
+                prefixes = Set.of("/");
+            }
 
+            for (String prefix : prefixes) {
                 rules.append("        - matches:\n");
-                for (ThreeScaleProduct.MappingRule rule : pathRules) {
-                    rules.append("            - path:\n");
-                    rules.append("                type: ").append(pathType).append("\n");
-                    rules.append("                value: ").append(pathValue).append("\n");
-                    rules.append("              method: ").append(rule.httpMethod().toUpperCase()).append("\n");
-                }
+                rules.append("            - path:\n");
+                rules.append("                type: PathPrefix\n");
+                rules.append("                value: ").append(prefix).append("\n");
                 rules.append("          backendRefs:\n");
                 rules.append("            - name: ").append(backendSvcName).append("\n");
                 rules.append("              port: 8080\n");
             }
         }
+
+        String hostname = product.systemName() + "." + clusterDomain;
 
         String yaml = """
                 apiVersion: gateway.networking.k8s.io/v1
@@ -203,12 +362,14 @@ public class MigrationService {
                     app.kubernetes.io/managed-by: gateforge
                     gateforge.io/product: %s
                 spec:
+                  hostnames:
+                    - %s
                   parentRefs:
                     - name: %s
                       namespace: %s
                   rules:
                 %s""".formatted(name, namespace, product.systemName(),
-                gatewayName, gatewayNamespace, rules.toString());
+                hostname, gatewayName, gatewayNamespace, rules.toString());
 
         return new MigrationPlan.GeneratedResource("HTTPRoute", name, namespace, yaml);
     }

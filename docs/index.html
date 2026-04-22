@@ -24,8 +24,18 @@
     .hero .badges { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 24px; }
     .hero .badges img { width: auto; height: 22px; }
 
-    .container { max-width: 1140px; margin: 0 auto; padding: 0 24px; }
+    .experimental-banner {
+      display: flex; align-items: center; gap: 12px; justify-content: center;
+      background: rgba(238, 0, 0, 0.15); border: 1px solid rgba(238, 0, 0, 0.4);
+      border-radius: 8px; padding: 12px 24px; margin: 0 auto 24px; max-width: 700px;
+      font-size: 0.95rem; color: #ffcccc;
+    }
+    .exp-badge {
+      display: inline-block; background: #ee0000; color: white; padding: 3px 12px;
+      border-radius: 999px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.05em; white-space: nowrap;
+    }
 
+    .container { max-width: 1140px; margin: 0 auto; padding: 0 24px; }
     .section { padding: 48px 0; }
     .section h2 { font-family: 'Red Hat Display', sans-serif; font-size: 1.75rem; margin-bottom: 24px; }
     .section h3 { font-size: 1.2rem; margin-bottom: 8px; }
@@ -73,6 +83,69 @@
     .mermaid-wrapper { background: #fff; border: 1px solid #d2d2d2; border-radius: 8px; padding: 24px; margin: 24px 0; overflow-x: auto; }
     .mermaid-wrapper h3 { margin-bottom: 16px; color: #151515; }
     .mermaid { text-align: center; }
+
+    .compat-table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+    .compat-table th, .compat-table td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #d2d2d2; }
+    .compat-table th { background: #f0f0f0; font-weight: 600; font-size: 0.9rem; }
+    .compat-table td { font-size: 0.9rem; }
+    .compat-badge {
+      display: inline-block; padding: 2px 10px; border-radius: 999px;
+      font-size: 0.75rem; font-weight: 600;
+    }
+    .compat-tested { background: #e6f5e0; color: #2d6b24; }
+    .compat-compatible { background: #e0ecff; color: #0066cc; }
+    .compat-untested { background: #f5f5f5; color: #6a6e73; }
+
+    .screenshot-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 24px; margin: 24px 0;
+    }
+    .screenshot {
+      cursor: zoom-in; position: relative; border-radius: 8px; overflow: hidden;
+      border: 1px solid #d2d2d2; background: white;
+    }
+    .screenshot img {
+      width: 100%; display: block; border-radius: 8px 8px 0 0; transition: transform 0.2s;
+    }
+    .screenshot:hover img { transform: scale(1.02); }
+    .screenshot h4 {
+      padding: 12px 16px; margin: 0; font-size: 0.95rem; color: #151515;
+    }
+    .zoom-hint {
+      position: absolute; bottom: 48px; right: 8px; background: rgba(0,0,0,0.6);
+      color: white; padding: 4px 10px; border-radius: 4px; font-size: 0.75rem;
+      opacity: 0; transition: opacity 0.2s;
+    }
+    .screenshot:hover .zoom-hint { opacity: 1; }
+
+    .lightbox {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.92); z-index: 9999; cursor: zoom-out;
+      justify-content: center; align-items: center;
+    }
+    .lightbox.active { display: flex; }
+    .lightbox img { max-width: 95%; max-height: 95%; border-radius: 8px; box-shadow: 0 8px 40px rgba(0,0,0,0.5); }
+    .lightbox-close {
+      position: absolute; top: 20px; right: 30px; color: white;
+      font-size: 2.5rem; cursor: pointer; line-height: 1;
+    }
+    .lightbox-close:hover { color: #ff6666; }
+
+    .vision-section { background: #f9f9f9; border: 1px solid #d2d2d2; border-radius: 8px; padding: 24px; margin: 24px 0; }
+    .vision-section h3 { color: #0066cc; margin-bottom: 12px; }
+    .phase-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin: 16px 0; }
+    .phase-card {
+      background: white; border: 1px solid #d2d2d2; border-radius: 8px; padding: 18px;
+    }
+    .phase-card h4 { color: #ee0000; margin-bottom: 6px; font-size: 1rem; }
+    .phase-card p { color: #6a6e73; font-size: 0.88rem; margin: 0; }
+    .phase-badge {
+      display: inline-block; padding: 2px 10px; border-radius: 999px;
+      font-size: 0.72rem; font-weight: 600; margin-bottom: 8px;
+    }
+    .phase-low { background: #e6f5e0; color: #2d6b24; }
+    .phase-medium { background: #fef3cd; color: #856404; }
+    .phase-high { background: #fce4ec; color: #c9190b; }
   </style>
 </head>
 <body>
@@ -80,15 +153,111 @@
   <section class="hero">
     <img src="assets/logo.svg" alt="GateForge Logo">
     <h1>GateForge</h1>
-    <p>AI-powered migration platform for transitioning from Red Hat 3scale API Management to Red Hat Connectivity Link (Kuadrant) on OpenShift.</p>
+    <div class="experimental-banner">
+      <span class="exp-badge">EXPERIMENTAL</span>
+      <span>This project is in early experimental phase. APIs and features may change without notice.</span>
+    </div>
+    <p>AI-powered migration platform for transitioning from <strong>Red Hat 3scale API Management</strong> to <strong>Red Hat Connectivity Link</strong> (Kuadrant) on OpenShift. GateForge automates discovery, analysis, resource generation, and validation &mdash; powered by LangChain4j, Model Context Protocol (MCP), and kuadrantctl.</p>
     <div class="badges">
       <a href="https://artifacthub.io/packages/search?repo=gateforge"><img src="https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/gateforge" alt="Artifact Hub"></a>
       <a href="https://quay.io/repository/maximilianopizarro/gateforge-backend"><img src="https://img.shields.io/badge/quay.io-backend-blue" alt="Quay Backend"></a>
       <a href="https://quay.io/repository/maximilianopizarro/gateforge-frontend"><img src="https://img.shields.io/badge/quay.io-frontend-blue" alt="Quay Frontend"></a>
-      <img src="https://img.shields.io/badge/OpenShift-4.21-red" alt="OpenShift 4.21">
+      <img src="https://img.shields.io/badge/OpenShift-4.20%2B-red" alt="OpenShift 4.20+">
       <img src="https://img.shields.io/badge/License-Apache%202.0-green" alt="License">
     </div>
   </section>
+
+  <section class="section" style="background:#f5f5f5;">
+    <div class="container">
+      <h2>What does GateForge solve?</h2>
+      <p style="color:#6a6e73; margin-bottom:20px; max-width:800px; line-height:1.7;">
+        Organizations running <strong>Red Hat 3scale API Management</strong> need a clear, automated path to <strong>Kubernetes-native API management</strong> via Red Hat Connectivity Link (Kuadrant). Manual migration is complex: mapping 3scale Products, Backends, Mapping Rules, Application Plans, and authentication configs to Gateway API HTTPRoutes, AuthPolicies, and RateLimitPolicies requires deep expertise in both ecosystems.
+      </p>
+      <p style="color:#6a6e73; margin-bottom:20px; max-width:800px; line-height:1.7;">
+        <strong>GateForge</strong> bridges this gap by:
+      </p>
+      <div class="card-grid" style="grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));">
+        <div class="card">
+          <h3>Discovery</h3>
+          <p>Automatically discovers 3scale Products, Backends, and ActiveDocs from both CRDs and the Admin API.</p>
+        </div>
+        <div class="card">
+          <h3>Analysis</h3>
+          <p>AI-assisted analysis of your 3scale configuration to generate equivalent Connectivity Link resources.</p>
+        </div>
+        <div class="card">
+          <h3>Migration</h3>
+          <p>Generates Gateway, HTTPRoute, AuthPolicy, and RateLimitPolicy YAML with one-click apply to cluster.</p>
+        </div>
+        <div class="card">
+          <h3>Validation</h3>
+          <p>Post-migration test commands, audit trail, and bulk revert to 3scale if needed.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>Compatibility Matrix</h2>
+      <p style="color:#6a6e73; margin-bottom:16px;">GateForge has been tested with the following Red Hat product versions:</p>
+      <table class="compat-table">
+        <thead>
+          <tr><th>Product</th><th>Version</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>OpenShift Container Platform</td><td>4.20, 4.21</td><td><span class="compat-badge compat-tested">Tested</span></td></tr>
+          <tr><td>Red Hat Connectivity Link</td><td>1.2, 1.3</td><td><span class="compat-badge compat-tested">Tested</span></td></tr>
+          <tr><td>Kuadrant (upstream)</td><td>1.1.x (bundled with Connectivity Link)</td><td><span class="compat-badge compat-tested">Tested</span></td></tr>
+          <tr><td>Red Hat 3scale API Management</td><td>2.16.x (2.16.2, 2.16.3)</td><td><span class="compat-badge compat-tested">Tested</span></td></tr>
+          <tr><td>Red Hat Build of Keycloak (RHBK)</td><td>26.4.x</td><td><span class="compat-badge compat-tested">Tested</span></td></tr>
+          <tr><td>Istio (Sail Operator / Service Mesh 3.x)</td><td>3.x</td><td><span class="compat-badge compat-tested">Tested</span></td></tr>
+          <tr><td>Gateway API</td><td>v1.2.x (bundled with OpenShift)</td><td><span class="compat-badge compat-compatible">Compatible</span></td></tr>
+          <tr><td>Microcks</td><td>1.10.x</td><td><span class="compat-badge compat-compatible">Compatible</span></td></tr>
+          <tr><td>Red Hat Developer Hub</td><td>1.4.x</td><td><span class="compat-badge compat-compatible">Compatible</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="section" style="background: #f5f5f5;">
+    <div class="container">
+      <h2>Screenshots</h2>
+      <p style="color:#6a6e73; margin-bottom:16px;">Click any image to enlarge.</p>
+      <div class="screenshot-grid">
+        <div class="screenshot" onclick="openLightbox(this)">
+          <img src="assets/screenshots/dashboard.png" alt="Dashboard" loading="lazy">
+          <span class="zoom-hint">Click to enlarge</span>
+          <h4>Dashboard &mdash; Cluster Overview</h4>
+        </div>
+        <div class="screenshot" onclick="openLightbox(this)">
+          <img src="assets/screenshots/threescale-explorer.png" alt="3scale Explorer" loading="lazy">
+          <span class="zoom-hint">Click to enlarge</span>
+          <h4>3scale Explorer &mdash; Products &amp; Backends</h4>
+        </div>
+        <div class="screenshot" onclick="openLightbox(this)">
+          <img src="assets/screenshots/migration-step1.png" alt="Migration Wizard" loading="lazy">
+          <span class="zoom-hint">Click to enlarge</span>
+          <h4>Migration Wizard &mdash; Product Selection</h4>
+        </div>
+        <div class="screenshot" onclick="openLightbox(this)">
+          <img src="assets/screenshots/chat-assistant.png" alt="AI Chat Assistant" loading="lazy">
+          <span class="zoom-hint">Click to enlarge</span>
+          <h4>AI Chat Assistant</h4>
+        </div>
+        <div class="screenshot" onclick="openLightbox(this)">
+          <img src="assets/screenshots/audit-log.png" alt="Audit Log" loading="lazy">
+          <span class="zoom-hint">Click to enlarge</span>
+          <h4>Audit Log</h4>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div id="lightbox" class="lightbox" onclick="closeLightbox()">
+    <img id="lightbox-img" src="" alt="Enlarged screenshot">
+    <span class="lightbox-close">&times;</span>
+  </div>
 
   <section class="section">
     <div class="container">
@@ -135,7 +304,7 @@
 
       <div class="card-grid">
         <div class="card">
-          <h3>🔍 Discovery &amp; Analysis</h3>
+          <h3>Discovery &amp; Analysis</h3>
           <p><strong>Try these prompts:</strong></p>
           <div class="install-block">
             <span class="cmd">List all 3scale Products and Backends deployed in my cluster and show their current configuration</span>
@@ -148,36 +317,36 @@
           </div>
         </div>
         <div class="card">
-          <h3>🔄 Migration Planning</h3>
+          <h3>Migration Planning</h3>
           <p><strong>Try these prompts:</strong></p>
           <div class="install-block">
             <span class="cmd">Analyze my 3scale configuration and generate a migration plan to Connectivity Link using a shared gateway strategy</span>
           </div>
           <div class="install-block">
-            <span class="cmd">Compare the shared, dual, and dedicated gateway strategies for my migration. What are the trade-offs of each?</span>
+            <span class="cmd">Compare the shared, dual, and dedicated gateway strategies for my migration</span>
           </div>
           <div class="install-block">
             <span class="cmd">Explain the migration steps from 3scale to Kuadrant</span>
           </div>
         </div>
         <div class="card">
-          <h3>🛡️ Policy Generation</h3>
+          <h3>Policy Generation</h3>
           <p><strong>Try these prompts:</strong></p>
           <div class="install-block">
-            <span class="cmd">Generate an AuthPolicy for my API that replaces the 3scale API Key authentication with Kuadrant AuthPolicy using Authorino</span>
+            <span class="cmd">Generate an AuthPolicy for my API that replaces the 3scale API Key authentication with Kuadrant AuthPolicy</span>
           </div>
           <div class="install-block">
-            <span class="cmd">Create a RateLimitPolicy equivalent to my 3scale Application Plan that limits 100 requests per minute per user</span>
+            <span class="cmd">Create a RateLimitPolicy equivalent to my 3scale Application Plan that limits 100 requests per minute</span>
           </div>
           <div class="install-block">
             <span class="cmd">What is a DNSPolicy in Kuadrant?</span>
           </div>
         </div>
         <div class="card">
-          <h3>🌐 Route &amp; Gateway Generation</h3>
+          <h3>Route &amp; Gateway Generation</h3>
           <p><strong>Try these prompts:</strong></p>
           <div class="install-block">
-            <span class="cmd">Convert my 3scale mapping rules into Kubernetes Gateway API HTTPRoute resources with proper path and method matching</span>
+            <span class="cmd">Convert my 3scale mapping rules into Gateway API HTTPRoute resources with proper path matching</span>
           </div>
           <div class="install-block">
             <span class="cmd">Generate Gateway YAML for istio class</span>
@@ -310,6 +479,72 @@ sequenceDiagram
     </div>
   </section>
 
+  <section class="section" style="background:#f5f5f5;">
+    <div class="container">
+      <h2>Multi-Cluster Feasibility</h2>
+      <p style="color:#6a6e73; margin-bottom:20px; max-width:800px; line-height:1.7;">
+        GateForge currently operates as a single-cluster tool. Below is the roadmap for extending it to multi-cluster environments with multiple 3scale instances.
+      </p>
+
+      <div class="mermaid-wrapper">
+        <h3>Multi-Cluster Vision</h3>
+        <pre class="mermaid">
+graph TB
+  subgraph Hub["Hub Cluster"]
+    GF[GateForge Hub Instance]
+    ACM[ACM / ArgoCD]
+  end
+  subgraph SpokeA["Spoke Cluster A"]
+    A3[3scale v2.16]
+    AK[Kuadrant 1.3]
+  end
+  subgraph SpokeB["Spoke Cluster B"]
+    B3[3scale v2.14]
+    BK[Kuadrant 1.2]
+  end
+
+  GF -->|kubeconfig| SpokeA
+  GF -->|kubeconfig| SpokeB
+  ACM --> SpokeA
+  ACM --> SpokeB
+
+  style GF fill:#ee0000,color:#fff
+  style ACM fill:#0066cc,color:#fff
+  style A3 fill:#151515,color:#fff
+  style B3 fill:#151515,color:#fff
+        </pre>
+      </div>
+
+      <div class="phase-grid">
+        <div class="phase-card">
+          <span class="phase-badge phase-low">Low Effort</span>
+          <h4>Phase 1 &mdash; Multiple 3scale Sources</h4>
+          <p>Support N 3scale Admin API endpoints. Aggregate products from all sources with source-cluster tagging. ~2-3 days.</p>
+        </div>
+        <div class="phase-card">
+          <span class="phase-badge phase-medium">Medium Effort</span>
+          <h4>Phase 2 &mdash; Multi-Cluster Apply</h4>
+          <p>Support multiple kubeconfig entries (as Secrets). Cluster selector in migration wizard. Per-cluster RBAC validation. ~1-2 weeks.</p>
+        </div>
+        <div class="phase-card">
+          <span class="phase-badge phase-high">High Effort</span>
+          <h4>Phase 3 &mdash; Hub-Spoke Architecture</h4>
+          <p>ACM integration. Centralized migration history. Cross-cluster validation. Federation of audit logs. Longer-term roadmap.</p>
+        </div>
+      </div>
+
+      <div class="vision-section">
+        <h3>Integration Points</h3>
+        <ul style="list-style:disc; padding-left:24px; color:#6a6e73; line-height:2;">
+          <li><strong>Red Hat ACM</strong>: GateForge as a managed addon; leverage multi-cluster inventory and kubeconfig distribution</li>
+          <li><strong>ArgoCD multi-cluster</strong>: Use ArgoCD cluster Secrets for spoke discovery</li>
+          <li><strong>Kuadrant multi-cluster DNS/TLS</strong>: Kuadrant 1.3+ supports multi-cluster policies that work with GateForge-generated resources</li>
+          <li><strong>Fabric8 KubernetesClient</strong>: Already supports creating per-cluster clients from kubeconfig files</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
   <section class="section">
     <div class="container">
       <h2>Helm Chart Values</h2>
@@ -326,7 +561,7 @@ sequenceDiagram
           <tr><td><code>threescale.adminApi.accessToken</code></td><td>""</td><td>3scale access token</td></tr>
           <tr><td><code>connectivityLink.gatewayStrategy</code></td><td>shared</td><td>shared / dual / dedicated</td></tr>
           <tr><td><code>connectivityLink.gatewayClassName</code></td><td>istio</td><td>Gateway class name</td></tr>
-          <tr><td><code>rbac.clusterAdmin</code></td><td>true</td><td>Bind cluster-admin role</td></tr>
+          <tr><td><code>rbac.clusterAdmin</code></td><td>false</td><td>Use cluster-admin (dev only) vs least-privilege RBAC</td></tr>
           <tr><td><code>route.enabled</code></td><td>true</td><td>Create OpenShift Route</td></tr>
         </tbody>
       </table>
@@ -337,60 +572,15 @@ sequenceDiagram
     <div class="container">
       <h2>Official Documentation</h2>
       <ul class="doc-links">
-        <li>
-          <div>
-            <a href="https://docs.redhat.com/en/documentation/red_hat_connectivity_link" target="_blank">Red Hat Connectivity Link</a>
-            <div class="desc">Official Red Hat product documentation for Connectivity Link</div>
-          </div>
-        </li>
-        <li>
-          <div>
-            <a href="https://docs.kuadrant.io/" target="_blank">Kuadrant Documentation</a>
-            <div class="desc">Upstream project docs for AuthPolicy, RateLimitPolicy, DNSPolicy, TLSPolicy</div>
-          </div>
-        </li>
-        <li>
-          <div>
-            <a href="https://github.com/Kuadrant/kuadrantctl" target="_blank">kuadrantctl CLI</a>
-            <div class="desc">Generate Gateway API and Kuadrant resources from OpenAPI 3.x specs</div>
-          </div>
-        </li>
-        <li>
-          <div>
-            <a href="https://docs.redhat.com/en/documentation/red_hat_3scale_api_management" target="_blank">Red Hat 3scale API Management</a>
-            <div class="desc">Official documentation for 3scale, including Admin API reference</div>
-          </div>
-        </li>
-        <li>
-          <div>
-            <a href="https://github.com/3scale/3scale-operator" target="_blank">3scale Operator CRDs</a>
-            <div class="desc">Product, Backend, APIManager custom resource definitions</div>
-          </div>
-        </li>
-        <li>
-          <div>
-            <a href="https://gateway-api.sigs.k8s.io/" target="_blank">Kubernetes Gateway API</a>
-            <div class="desc">Official Gateway API specification for HTTPRoute, Gateway resources</div>
-          </div>
-        </li>
-        <li>
-          <div>
-            <a href="https://quarkus.io/blog/quarkus-langchain4j-mcp/" target="_blank">Quarkus LangChain4j + MCP</a>
-            <div class="desc">Using Model Context Protocol with Quarkus and LangChain4j</div>
-          </div>
-        </li>
-        <li>
-          <div>
-            <a href="https://ux.redhat.com/" target="_blank">Red Hat Design System</a>
-            <div class="desc">Web components and design tokens for Red Hat branded experiences</div>
-          </div>
-        </li>
-        <li>
-          <div>
-            <a href="https://onlu.ch/en/migration-path-from-red-hat-3scale-api-management-to-red-hat-connectivity-link/" target="_blank">Migration Guide (ONLU)</a>
-            <div class="desc">Detailed phased migration strategy from 3scale to Connectivity Link</div>
-          </div>
-        </li>
+        <li><div><a href="https://docs.redhat.com/en/documentation/red_hat_connectivity_link" target="_blank">Red Hat Connectivity Link</a><div class="desc">Official Red Hat product documentation for Connectivity Link</div></div></li>
+        <li><div><a href="https://docs.kuadrant.io/" target="_blank">Kuadrant Documentation</a><div class="desc">Upstream project docs for AuthPolicy, RateLimitPolicy, DNSPolicy, TLSPolicy</div></div></li>
+        <li><div><a href="https://github.com/Kuadrant/kuadrantctl" target="_blank">kuadrantctl CLI</a><div class="desc">Generate Gateway API and Kuadrant resources from OpenAPI 3.x specs</div></div></li>
+        <li><div><a href="https://docs.redhat.com/en/documentation/red_hat_3scale_api_management" target="_blank">Red Hat 3scale API Management</a><div class="desc">Official documentation for 3scale, including Admin API reference</div></div></li>
+        <li><div><a href="https://github.com/3scale/3scale-operator" target="_blank">3scale Operator CRDs</a><div class="desc">Product, Backend, APIManager custom resource definitions</div></div></li>
+        <li><div><a href="https://gateway-api.sigs.k8s.io/" target="_blank">Kubernetes Gateway API</a><div class="desc">Official Gateway API specification for HTTPRoute, Gateway resources</div></div></li>
+        <li><div><a href="https://quarkus.io/blog/quarkus-langchain4j-mcp/" target="_blank">Quarkus LangChain4j + MCP</a><div class="desc">Using Model Context Protocol with Quarkus and LangChain4j</div></div></li>
+        <li><div><a href="https://ux.redhat.com/" target="_blank">Red Hat Design System</a><div class="desc">Web components and design tokens for Red Hat branded experiences</div></div></li>
+        <li><div><a href="https://onlu.ch/en/migration-path-from-red-hat-3scale-api-management-to-red-hat-connectivity-link/" target="_blank">Migration Guide (ONLU)</a><div class="desc">Detailed phased migration strategy from 3scale to Connectivity Link</div></div></li>
       </ul>
     </div>
   </section>
@@ -410,6 +600,18 @@ sequenceDiagram
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
-  <script>mermaid.initialize({startOnLoad: true, theme: 'neutral', securityLevel: 'loose'});</script>
+  <script>
+    mermaid.initialize({startOnLoad: true, theme: 'neutral', securityLevel: 'loose'});
+
+    function openLightbox(el) {
+      var src = el.querySelector('img').src;
+      document.getElementById('lightbox-img').src = src;
+      document.getElementById('lightbox').classList.add('active');
+    }
+    function closeLightbox() {
+      document.getElementById('lightbox').classList.remove('active');
+    }
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
+  </script>
 </body>
 </html>

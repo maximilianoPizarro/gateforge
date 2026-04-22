@@ -74,7 +74,13 @@ public class ThreeScaleService {
             }
         }
         merged.putAll(apiProducts);
-        return new ArrayList<>(merged.values());
+
+        Map<String, String[]> backendEndpoints = resolveBackendEndpointMap();
+        List<ThreeScaleProduct> result = new ArrayList<>();
+        for (ThreeScaleProduct p : merged.values()) {
+            result.add(resolveBackendInfo(p, backendEndpoints));
+        }
+        return result;
     }
 
     private ThreeScaleProduct enrichProduct(ThreeScaleProduct crd, ThreeScaleProduct api) {
@@ -88,7 +94,8 @@ public class ThreeScaleService {
         return new ThreeScaleProduct(
                 crd.name(), crd.namespace(), crd.systemName(),
                 crd.description().isEmpty() ? api.description() : crd.description(),
-                crd.deploymentOption(), rules, usages, auth, source
+                crd.deploymentOption(), rules, usages, auth, source,
+                null, null
         );
     }
 
@@ -215,7 +222,8 @@ public class ThreeScaleService {
                 resource.getMetadata().getName(),
                 resource.getMetadata().getNamespace(),
                 systemName, description, deployment,
-                mappingRules, backendUsages, auth, "CRD"
+                mappingRules, backendUsages, auth, "CRD",
+                null, null
         );
     }
 
@@ -278,13 +286,71 @@ public class ThreeScaleService {
                 products.add(new ThreeScaleProduct(
                         name, "admin-api",
                         systemName, description, deployment,
-                        mappingRules, backendUsages, auth, "Admin API"
+                        mappingRules, backendUsages, auth, "Admin API",
+                        null, null
                 ));
             }
         } catch (Exception e) {
             LOG.log(Level.WARNING, "Admin API product discovery failed", e);
         }
         return products;
+    }
+
+    // --- Backend namespace resolution ---
+
+    private Map<String, String[]> resolveBackendEndpointMap() {
+        Map<String, String[]> map = new HashMap<>();
+        if (!adminApiClient.isConfigured()) return map;
+        try {
+            List<Map<String, Object>> backends = adminApiClient.listBackendApis();
+            for (Map<String, Object> b : backends) {
+                String ep = String.valueOf(b.getOrDefault("private_endpoint", ""));
+                if (ep.isBlank()) continue;
+
+                String sysName = String.valueOf(b.getOrDefault("system_name", ""));
+                String bName = String.valueOf(b.getOrDefault("name", ""));
+                Object idObj = b.get("id");
+                long id = idObj instanceof Number n ? n.longValue() : 0L;
+
+                String[] svcInfo = extractSvcInfo(ep);
+
+                if (!sysName.isBlank()) map.put(sysName, svcInfo);
+                if (!bName.isBlank()) map.put(bName, svcInfo);
+                if (id > 0) map.put("backend-" + id, svcInfo);
+            }
+        } catch (Exception e) {
+            LOG.log(Level.WARNING, "Failed to resolve backend endpoints", e);
+        }
+        return map;
+    }
+
+    private ThreeScaleProduct resolveBackendInfo(ThreeScaleProduct p, Map<String, String[]> endpoints) {
+        for (ThreeScaleProduct.BackendUsage usage : p.backendUsages()) {
+            String[] info = endpoints.get(usage.backendName());
+            if (info != null) {
+                return new ThreeScaleProduct(
+                        p.name(), p.namespace(), p.systemName(),
+                        p.description(), p.deploymentOption(),
+                        p.mappingRules(), p.backendUsages(), p.authentication(),
+                        p.source(), info[1], info[0]
+                );
+            }
+        }
+        return p;
+    }
+
+    private String[] extractSvcInfo(String endpoint) {
+        try {
+            java.net.URI uri = java.net.URI.create(endpoint);
+            String host = uri.getHost();
+            if (host != null) {
+                String[] parts = host.split("\\.");
+                String svcName = parts.length > 0 ? parts[0] : host;
+                String ns = parts.length > 1 ? parts[1] : "";
+                return new String[]{svcName, ns};
+            }
+        } catch (Exception ignored) {}
+        return new String[]{"", ""};
     }
 
     // --- Helpers ---

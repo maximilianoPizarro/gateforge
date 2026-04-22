@@ -20,6 +20,8 @@ export interface ThreeScaleProduct {
   backendUsages: { backendName: string; path: string }[];
   authentication: Record<string, unknown>;
   source: string;
+  backendNamespace?: string;
+  backendServiceName?: string;
 }
 
 export interface ThreeScaleBackend {
@@ -59,6 +61,21 @@ export interface MigrationPlan {
   resources: GeneratedResource[];
   aiAnalysis: string;
   createdAt: string;
+  catalogInfoYaml?: string;
+  status?: string;
+}
+
+export interface BulkRevertResult {
+  totalPlans: number;
+  totalReverted: number;
+  totalFailed: number;
+  planResults: ApplyResult[];
+}
+
+export interface TestCommand {
+  label: string;
+  command: string;
+  type: string;
 }
 
 export interface AuditEntry {
@@ -91,6 +108,13 @@ export interface ResourceResult {
   namespace: string;
   success: boolean;
   message: string;
+}
+
+export interface FeatureFlags {
+  developerHub: {
+    enabled: boolean;
+    url: string;
+  };
 }
 
 @Injectable({ providedIn: 'root' })
@@ -133,9 +157,25 @@ export class ApiService {
     return this.http.post<ApplyResult>(`${this.baseUrl}/migration/plans/${planId}/apply`, {});
   }
 
+  revertPlan(planId: string): Observable<ApplyResult> {
+    return this.http.post<ApplyResult>(`${this.baseUrl}/migration/plans/${planId}/revert`, {});
+  }
+
+  revertBulk(planIds: string[], deleteGateway: boolean): Observable<BulkRevertResult> {
+    return this.http.post<BulkRevertResult>(`${this.baseUrl}/migration/revert-bulk`, { planIds, deleteGateway });
+  }
+
+  getTestCommands(planId: string): Observable<TestCommand[]> {
+    return this.http.get<TestCommand[]>(`${this.baseUrl}/migration/plans/${planId}/test-commands`);
+  }
+
   chat(message: string): Observable<ChatMessage> {
     return this.http.post<ChatMessage>(`${this.baseUrl}/chat`, {
       role: 'user', content: message
     });
+  }
+
+  getFeatures(): Observable<FeatureFlags> {
+    return this.http.get<FeatureFlags>(`${this.baseUrl}/cluster/features`);
   }
 }

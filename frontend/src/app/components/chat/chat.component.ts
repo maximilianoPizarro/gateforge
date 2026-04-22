@@ -2,7 +2,7 @@ import { Component, CUSTOM_ELEMENTS_SCHEMA, OnInit, ViewChild, ElementRef, After
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
-import { take } from 'rxjs';
+import { take, retry, timeout } from 'rxjs';
 import { ApiService, ChatMessage } from '../../services/api.service';
 
 @Component({
@@ -450,7 +450,10 @@ export class ChatComponent implements OnInit, AfterViewChecked {
     this.loading = true;
     this.requestScroll();
 
-    this.api.chat(content).subscribe({
+    this.api.chat(content).pipe(
+      timeout(115000),
+      retry({ count: 1, delay: 2000 })
+    ).subscribe({
       next: (res) => {
         this.messages.push(res);
         this.loading = false;
@@ -459,7 +462,7 @@ export class ChatComponent implements OnInit, AfterViewChecked {
       error: () => {
         this.messages.push({
           role: 'assistant',
-          content: 'Error communicating with AI. Check backend connection.'
+          content: 'The AI is taking too long to respond. This can happen with complex queries. Please try again or simplify your question.'
         });
         this.loading = false;
         this.requestScroll();

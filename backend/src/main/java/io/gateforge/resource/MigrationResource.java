@@ -14,6 +14,7 @@ import org.jboss.logging.Logger;
 
 import java.time.Instant;
 import java.util.*;
+import java.util.Map;
 
 @Path("/api/migration")
 @Produces(MediaType.APPLICATION_JSON)
@@ -31,6 +32,8 @@ public class MigrationResource {
     public record AnalyzeRequest(String gatewayStrategy, List<String> products) {}
     public record ApplyResult(String planId, int applied, int failed, List<ResourceResult> results) {}
     public record ResourceResult(String kind, String name, String namespace, boolean success, String message) {}
+    public record BulkRevertRequest(List<String> planIds, boolean deleteGateway) {}
+    public record BulkRevertResult(int totalPlans, int totalReverted, int totalFailed, List<ApplyResult> planResults) {}
 
     @POST
     @Path("/analyze")
@@ -81,6 +84,104 @@ public class MigrationResource {
             generic.getMetadata().setNamespace(namespace);
         }
         kubernetesClient.resource(generic).serverSideApply();
+    }
+
+    @POST
+    @Path("/plans/{id}/revert")
+    public ApplyResult revertPlan(@PathParam("id") String id) {
+        MigrationPlan plan = migrationService.getPlan(id);
+        if (plan == null) {
+            throw new NotFoundException("Plan not found: " + id);
+        }
+
+        List<ResourceResult> results = new ArrayList<>();
+        int applied = 0;
+        int failed = 0;
+
+        List<MigrationPlan.GeneratedResource> reversed = new ArrayList<>(plan.resources());
+        Collections.reverse(reversed);
+
+        for (MigrationPlan.GeneratedResource res : reversed) {
+            if ("Gateway".equals(res.kind())) continue;
+            try {
+                deleteResource(res.yaml(), res.namespace());
+                results.add(new ResourceResult(res.kind(), res.name(), res.namespace(), true, "Deleted"));
+                applied++;
+
+                migrationService.addAuditEntry(new AuditEntry(
+                        UUID.randomUUID().toString(),
+                        Instant.now(), "REVERT", res.kind(), res.name(), res.namespace(),
+                        res.yaml(), null, "GateForge Migration Wizard"
+                ));
+                LOG.infof("Reverted %s/%s from namespace %s", res.kind(), res.name(), res.namespace());
+            } catch (Exception e) {
+                String msg = e.getMessage();
+                if (msg != null && msg.contains("NotFound")) {
+                    results.add(new ResourceResult(res.kind(), res.name(), res.namespace(), true, "Already absent"));
+                    applied++;
+                } else {
+                    results.add(new ResourceResult(res.kind(), res.name(), res.namespace(), false, msg));
+                    failed++;
+                    LOG.warnf("Failed to revert %s/%s: %s", res.kind(), res.name(), msg);
+                }
+            }
+        }
+
+        migrationService.updatePlanStatus(id, "REVERTED");
+        return new ApplyResult(id, applied, failed, results);
+    }
+
+    @POST
+    @Path("/revert-bulk")
+    public BulkRevertResult revertBulk(BulkRevertRequest request) {
+        List<ApplyResult> planResults = new ArrayList<>();
+        int totalReverted = 0;
+        int totalFailed = 0;
+
+        for (String planId : request.planIds()) {
+            try {
+                ApplyResult result = revertPlan(planId);
+                planResults.add(result);
+                if (result.failed() == 0) totalReverted++;
+                else totalFailed++;
+            } catch (Exception e) {
+                planResults.add(new ApplyResult(planId, 0, 1, List.of(
+                        new ResourceResult("Plan", planId, "", false, e.getMessage())
+                )));
+                totalFailed++;
+            }
+        }
+
+        if (request.deleteGateway()) {
+            for (MigrationPlan plan : migrationService.listPlans()) {
+                for (MigrationPlan.GeneratedResource res : plan.resources()) {
+                    if ("Gateway".equals(res.kind())) {
+                        try {
+                            deleteResource(res.yaml(), res.namespace());
+                            LOG.infof("Deleted shared Gateway %s", res.name());
+                        } catch (Exception e) {
+                            LOG.warnf("Failed to delete Gateway %s: %s", res.name(), e.getMessage());
+                        }
+                    }
+                }
+            }
+        }
+
+        return new BulkRevertResult(request.planIds().size(), totalReverted, totalFailed, planResults);
+    }
+
+    @GET
+    @Path("/plans/{id}/test-commands")
+    public List<Map<String, String>> getTestCommands(@PathParam("id") String id) {
+        return migrationService.generateTestCommands(id);
+    }
+
+    private void deleteResource(String yaml, String namespace) {
+        GenericKubernetesResource generic = Serialization.unmarshal(yaml, GenericKubernetesResource.class);
+        if (namespace != null && !namespace.isBlank()) {
+            generic.getMetadata().setNamespace(namespace);
+        }
+        kubernetesClient.resource(generic).delete();
     }
 
     @GET

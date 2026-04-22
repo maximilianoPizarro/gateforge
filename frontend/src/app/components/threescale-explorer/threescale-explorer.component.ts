@@ -110,7 +110,7 @@ type SourceTab = 'all' | 'crd' | 'admin-api';
                   <h3 class="product-title">{{ product.name }}</h3>
                   <div class="badge-row">
                     <span class="badge" [class.badge-crd]="product.source === 'CRD'" [class.badge-api]="product.source === 'Admin API'" [class.badge-merged]="product.source === 'CRD + Admin API'">{{ product.source }}</span>
-                    <span class="badge badge-ns">{{ product.namespace }}</span>
+                    <span class="badge badge-ns">{{ product.backendNamespace || product.namespace }}</span>
                   </div>
                 </div>
                 <p class="system-name"><span class="meta-label">systemName</span> {{ product.systemName || '—' }}</p>
