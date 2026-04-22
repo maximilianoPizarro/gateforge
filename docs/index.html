@@ -69,6 +69,10 @@
     .site-footer .copy { font-size: 0.8rem; color: #6a6e73; }
 
     code { background: #e8e8e8; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
+
+    .mermaid-wrapper { background: #fff; border: 1px solid #d2d2d2; border-radius: 8px; padding: 24px; margin: 24px 0; overflow-x: auto; }
+    .mermaid-wrapper h3 { margin-bottom: 16px; color: #151515; }
+    .mermaid { text-align: center; }
   </style>
 </head>
 <body>
@@ -199,19 +203,96 @@
   <section class="section">
     <div class="container">
       <h2>Architecture</h2>
-      <table class="arch-table">
-        <thead>
-          <tr><th>Layer</th><th>Technology</th><th>Description</th></tr>
-        </thead>
-        <tbody>
-          <tr><td><strong>Frontend</strong></td><td>Angular 18, @rhds/elements</td><td>SPA with Red Hat Design System web components, served by Nginx (UBI9)</td></tr>
-          <tr><td><strong>Backend</strong></td><td>Quarkus 3.x, Java 17</td><td>REST API, AI agent, MCP servers, kuadrantctl integration</td></tr>
-          <tr><td><strong>AI</strong></td><td>LangChain4j, deepseek-r1</td><td>Migration analysis, resource generation, chat assistant via LiteLLM</td></tr>
-          <tr><td><strong>MCP Servers</strong></td><td>3scale, Connectivity Link, K8s</td><td>Tool calling for AI agent via Model Context Protocol</td></tr>
-          <tr><td><strong>Migration</strong></td><td>kuadrantctl, Fabric8</td><td>Generate HTTPRoute, AuthPolicy, RateLimitPolicy from 3scale configs</td></tr>
-          <tr><td><strong>Packaging</strong></td><td>Helm Chart, Podman</td><td>OpenShift deployment + local development</td></tr>
-        </tbody>
-      </table>
+
+      <div class="mermaid-wrapper">
+        <h3>General Architecture</h3>
+        <pre class="mermaid">
+graph LR
+  subgraph Frontend
+    A[Angular 18 SPA]
+    B[Red Hat Design System]
+  end
+  subgraph Backend["Backend (Quarkus 3.x)"]
+    C[REST API]
+    D[MigrationAgent AI]
+    E[MCP Servers]
+    F[kuadrantctl CLI]
+  end
+  subgraph External
+    G[OpenShift API]
+    H[3scale Admin API]
+    I[LiteLLM / LLM]
+  end
+
+  A -->|HTTP| C
+  C --> D
+  C --> E
+  C --> F
+  D -->|Tool Calling| E
+  D -->|Chat Completions| I
+  E -->|Fabric8 Client| G
+  E -->|HTTP| H
+  F -->|CLI exec| G
+
+  style A fill:#ee0000,color:#fff
+  style D fill:#0066cc,color:#fff
+  style G fill:#151515,color:#fff
+  style H fill:#151515,color:#fff
+  style I fill:#6a3d9a,color:#fff
+        </pre>
+      </div>
+
+      <div class="mermaid-wrapper">
+        <h3>Migration Flow</h3>
+        <pre class="mermaid">
+flowchart TD
+  S1[3scale CRDs in Cluster] --> D1[ClusterService discovers CRDs]
+  S2[3scale Admin API] --> D2[ThreeScaleAdminApiClient fetches products]
+  D1 --> M[Merge Products + Backends]
+  D2 --> M
+  M --> OAS[Build OpenAPI 3.0 Spec per Product]
+  OAS --> KC1[kuadrantctl generate HTTPRoute]
+  OAS --> KC2[kuadrantctl generate AuthPolicy]
+  OAS --> KC3[kuadrantctl generate RateLimitPolicy]
+  KC1 --> PLAN[Migration Plan]
+  KC2 --> PLAN
+  KC3 --> PLAN
+  GW[Gateway Strategy: shared / dual / dedicated] --> PLAN
+  PLAN --> APPLY[Apply to OpenShift Cluster]
+
+  style S1 fill:#ee0000,color:#fff
+  style S2 fill:#ee0000,color:#fff
+  style OAS fill:#0066cc,color:#fff
+  style PLAN fill:#3e8635,color:#fff
+  style APPLY fill:#151515,color:#fff
+        </pre>
+      </div>
+
+      <div class="mermaid-wrapper">
+        <h3>AI / MCP Tool Calling Flow</h3>
+        <pre class="mermaid">
+sequenceDiagram
+  participant U as User
+  participant Chat as ChatComponent
+  participant Agent as MigrationAgent
+  participant LLM as LiteLLM (deepseek-r1)
+  participant Tools as GateForgeTools
+  participant Svc as Backend Services
+
+  U->>Chat: Ask question
+  Chat->>Agent: POST /api/chat
+  Agent->>LLM: Chat completion + tool definitions
+  LLM-->>Agent: tool_call: listThreeScaleProducts()
+  Agent->>Tools: invoke listThreeScaleProducts
+  Tools->>Svc: ThreeScaleService.listProducts()
+  Svc-->>Tools: Product list
+  Tools-->>Agent: Formatted product data
+  Agent->>LLM: Tool result + continue
+  LLM-->>Agent: Final answer with real data
+  Agent-->>Chat: Response
+  Chat-->>U: Display answer
+        </pre>
+      </div>
 
       <h3 style="margin-top: 32px;">3scale to Connectivity Link Mapping</h3>
       <table class="arch-table">
@@ -328,5 +409,7 @@
     </div>
   </footer>
 
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({startOnLoad: true, theme: 'neutral', securityLevel: 'loose'});</script>
 </body>
 </html>

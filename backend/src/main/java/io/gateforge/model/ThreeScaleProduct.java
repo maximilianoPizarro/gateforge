@@ -11,7 +11,8 @@ public record ThreeScaleProduct(
     String deploymentOption,
     List<MappingRule> mappingRules,
     List<BackendUsage> backendUsages,
-    Map<String, Object> authentication
+    Map<String, Object> authentication,
+    String source
 ) {
     public record MappingRule(String httpMethod, String pattern, String metricRef, int delta) {}
     public record BackendUsage(String backendName, String path) {}

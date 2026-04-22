@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>io.gateforge</groupId>
     <artifactId>gateforge-backend</artifactId>
-    <version>0.1.0</version>
+    <version>0.1.6</version>
 
     <properties>
         <compiler-plugin.version>3.13.0</compiler-plugin.version>

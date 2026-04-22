@@ -2,7 +2,7 @@ import { Component, CUSTOM_ELEMENTS_SCHEMA, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { ApiService, ProjectInfo } from '../../services/api.service';
+import { ApiService, ProjectInfo, ThreeScaleStatus } from '../../services/api.service';
 
 const SYSTEM_PREFIXES = ['openshift-', 'kube-', 'default', 'openshift'];
 
@@ -35,6 +35,10 @@ const SYSTEM_PREFIXES = ['openshift-', 'kube-', 'default', 'openshift'];
             <div class="stat-card success">
               <span class="stat-number">{{ kuadrantCount }}</span>
               <span class="stat-label">With Kuadrant</span>
+            </div>
+            <div class="stat-card api" *ngIf="adminApiStatus?.configured && adminApiStatus?.reachable">
+              <span class="stat-number">{{ adminApiStatus?.productCount || 0 }}</span>
+              <span class="stat-label">Admin API Products</span>
             </div>
             <div class="stat-card muted">
               <span class="stat-number">{{ systemProjects.length }}</span>
@@ -215,6 +219,7 @@ const SYSTEM_PREFIXES = ['openshift-', 'kube-', 'default', 'openshift'];
     }
     .stat-card.highlight { border-color: rgba(238,0,0,0.5); background: rgba(238,0,0,0.1); }
     .stat-card.success { border-color: rgba(63,156,53,0.5); background: rgba(63,156,53,0.1); }
+    .stat-card.api { border-color: rgba(0,102,204,0.5); background: rgba(0,102,204,0.1); }
     .stat-card.muted { opacity: 0.6; }
     .stat-number { display: block; font-size: 1.8rem; font-weight: 700; font-family: 'Red Hat Display', sans-serif; }
     .stat-label { display: block; font-size: 0.8rem; color: #c9c9c9; margin-top: 2px; }
@@ -360,6 +365,7 @@ export class DashboardComponent implements OnInit {
   systemProjects: ProjectInfo[] = [];
   filteredProjects: ProjectInfo[] = [];
   pagedProjects: ProjectInfo[] = [];
+  adminApiStatus: ThreeScaleStatus | null = null;
   loading = true;
   searchTerm = '';
   showSystem = false;
@@ -401,6 +407,10 @@ export class DashboardComponent implements OnInit {
         this.loading = false;
       },
       error: () => { this.loading = false; }
+    });
+    this.api.getThreeScaleStatus().subscribe({
+      next: (status) => { this.adminApiStatus = status; },
+      error: () => {}
     });
   }
 

@@ -1,5 +1,7 @@
 package io.gateforge.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.gateforge.model.MigrationPlan;
 import io.gateforge.model.ThreeScaleProduct;
 import io.gateforge.model.AuditEntry;
@@ -22,6 +24,9 @@ public class MigrationService {
     @Inject
     KuadrantCtlService kuadrantCtlService;
 
+    @Inject
+    ObjectMapper objectMapper;
+
     private final List<AuditEntry> auditLog = new CopyOnWriteArrayList<>();
     private final Map<String, MigrationPlan> plans = new LinkedHashMap<>();
 
@@ -34,12 +39,15 @@ public class MigrationService {
 
         for (ThreeScaleProduct product : products) {
             String oasSpec = buildOpenApiFromProduct(product);
+            LOG.debugf("Generated OpenAPI for %s: %s", product.systemName(), oasSpec);
 
             String httpRouteYaml = kuadrantCtlService.generateHttpRoute(oasSpec);
             if (!httpRouteYaml.startsWith("ERROR")) {
                 resources.add(new MigrationPlan.GeneratedResource(
                         "HTTPRoute", product.systemName() + "-route",
                         product.namespace(), httpRouteYaml));
+            } else {
+                LOG.warnf("HTTPRoute generation failed for %s: %s", product.systemName(), httpRouteYaml);
             }
 
             String authPolicyYaml = kuadrantCtlService.generateAuthPolicy(oasSpec);
@@ -116,22 +124,50 @@ public class MigrationService {
     }
 
     private String buildOpenApiFromProduct(ThreeScaleProduct product) {
-        StringBuilder paths = new StringBuilder();
+        Map<String, Object> spec = new LinkedHashMap<>();
+        spec.put("openapi", "3.0.3");
+        spec.put("info", Map.of("title", product.systemName(), "version", "1.0"));
+
+        Map<String, Object> paths = new LinkedHashMap<>();
         for (ThreeScaleProduct.MappingRule rule : product.mappingRules()) {
-            String method = rule.httpMethod().toLowerCase();
-            paths.append("  ").append(rule.pattern()).append(":\n");
-            paths.append("    ").append(method).append(":\n");
-            paths.append("      operationId: ").append(rule.metricRef()).append("\n");
-            paths.append("      responses:\n");
-            paths.append("        '200':\n");
-            paths.append("          description: OK\n");
+            String path = sanitizePath(rule.pattern());
+            @SuppressWarnings("unchecked")
+            Map<String, Object> pathItem = (Map<String, Object>)
+                    paths.computeIfAbsent(path, k -> new LinkedHashMap<>());
+            String metricRef = rule.metricRef() != null && !rule.metricRef().isBlank()
+                    ? rule.metricRef() : "op";
+            String opId = metricRef + "_" + rule.httpMethod().toLowerCase();
+            pathItem.put(rule.httpMethod().toLowerCase(), Map.of(
+                    "operationId", opId,
+                    "responses", Map.of("200", Map.of("description", "OK"))
+            ));
         }
-        return """
-                openapi: "3.0.3"
-                info:
-                  title: %s
-                  version: "1.0"
-                paths:
-                %s""".formatted(product.systemName(), paths);
+
+        if (paths.isEmpty()) {
+            Map<String, Object> rootOp = new LinkedHashMap<>();
+            rootOp.put("get", Map.of(
+                    "operationId", product.systemName() + "_root",
+                    "responses", Map.of("200", Map.of("description", "OK"))
+            ));
+            paths.put("/", rootOp);
+        }
+
+        spec.put("paths", paths);
+
+        try {
+            return objectMapper.writeValueAsString(spec);
+        } catch (JsonProcessingException e) {
+            LOG.errorf("Failed to serialize OpenAPI spec for %s: %s", product.systemName(), e.getMessage());
+            return "{\"openapi\":\"3.0.3\",\"info\":{\"title\":\"%s\",\"version\":\"1.0\"},\"paths\":{\"/\":{\"get\":{\"operationId\":\"fallback\",\"responses\":{\"200\":{\"description\":\"OK\"}}}}}}"
+                    .formatted(product.systemName());
+        }
+    }
+
+    private String sanitizePath(String pattern) {
+        if (pattern == null || pattern.isBlank()) return "/";
+        String p = pattern.replaceAll("\\$$", "");
+        if (!p.startsWith("/")) p = "/" + p;
+        if (p.isEmpty()) p = "/";
+        return p;
     }
 }

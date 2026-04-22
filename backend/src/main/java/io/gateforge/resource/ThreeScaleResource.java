@@ -7,6 +7,7 @@ import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 
 import java.util.List;
+import java.util.Map;
 
 @Path("/api/threescale")
 @Produces(MediaType.APPLICATION_JSON)
@@ -34,7 +35,13 @@ public class ThreeScaleResource {
 
     @GET
     @Path("/backends")
-    public List<?> listBackends() {
-        return threeScaleService.listBackends();
+    public List<Map<String, Object>> listBackends() {
+        return threeScaleService.listBackendsCombined();
+    }
+
+    @GET
+    @Path("/status")
+    public Map<String, Object> getStatus() {
+        return threeScaleService.getAdminApiStatus();
     }
 }

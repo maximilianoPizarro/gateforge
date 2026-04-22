@@ -19,6 +19,30 @@ export interface ThreeScaleProduct {
   mappingRules: { httpMethod: string; pattern: string; metricRef: string; delta: number }[];
   backendUsages: { backendName: string; path: string }[];
   authentication: Record<string, unknown>;
+  source: string;
+}
+
+export interface ThreeScaleBackend {
+  name: string;
+  namespace?: string;
+  id?: number;
+  systemName?: string;
+  privateEndpoint?: string;
+  description?: string;
+  source: string;
+  createdAt?: string;
+  updatedAt?: string;
+  spec?: Record<string, unknown>;
+}
+
+export interface ThreeScaleStatus {
+  configured: boolean;
+  crdDiscoveryEnabled: boolean;
+  reachable?: boolean;
+  productCount?: number;
+  backendApiCount?: number;
+  activeDocsCount?: number;
+  error?: string;
 }
 
 export interface GeneratedResource {
@@ -68,8 +92,12 @@ export class ApiService {
     return this.http.get<ThreeScaleProduct[]>(`${this.baseUrl}/threescale/products`);
   }
 
-  getBackends(): Observable<unknown[]> {
-    return this.http.get<unknown[]>(`${this.baseUrl}/threescale/backends`);
+  getBackends(): Observable<ThreeScaleBackend[]> {
+    return this.http.get<ThreeScaleBackend[]>(`${this.baseUrl}/threescale/backends`);
+  }
+
+  getThreeScaleStatus(): Observable<ThreeScaleStatus> {
+    return this.http.get<ThreeScaleStatus>(`${this.baseUrl}/threescale/status`);
   }
 
   analyzeMigration(gatewayStrategy: string, products: string[]): Observable<MigrationPlan> {
