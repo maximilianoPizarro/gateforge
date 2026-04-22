@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GateForge - 3scale to Connectivity Link Migration</title>
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
+  <link rel="stylesheet" href="https://static.redhat.com/libs/redhat/redhat-font/4/webfonts/red-hat-font.min.css">
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@rhds/elements@4/elements/rh-card/rh-card.js"></script>
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@rhds/elements@4/elements/rh-cta/rh-cta.js"></script>
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@rhds/elements@4/elements/rh-footer/rh-footer.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Red Hat Text', sans-serif; color: #151515; line-height: 1.6; }
+    a { color: #06c; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .hero {
+      background: #151515; color: #fff; padding: 64px 24px; text-align: center;
+    }
+    .hero img { width: 100px; height: 100px; margin-bottom: 16px; }
+    .hero h1 { font-family: 'Red Hat Display', sans-serif; font-size: 2.5rem; font-weight: 700; margin-bottom: 8px; }
+    .hero p { font-size: 1.15rem; color: #c9c9c9; max-width: 700px; margin: 0 auto 24px; }
+    .hero .badges { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 24px; }
+    .hero .badges img { width: auto; height: 22px; }
+
+    .container { max-width: 1140px; margin: 0 auto; padding: 0 24px; }
+
+    .section { padding: 48px 0; }
+    .section h2 { font-family: 'Red Hat Display', sans-serif; font-size: 1.75rem; margin-bottom: 24px; }
+    .section h3 { font-size: 1.2rem; margin-bottom: 8px; }
+
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px; margin: 24px 0; }
+    .card {
+      background: #fff; border: 1px solid #d2d2d2; border-radius: 8px;
+      padding: 24px; transition: box-shadow 0.2s;
+    }
+    .card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
+    .card h3 { color: #ee0000; margin-bottom: 8px; }
+    .card p { color: #6a6e73; font-size: 0.95rem; }
+
+    .install-block {
+      background: #1e1e1e; color: #d4d4d4; padding: 20px 24px;
+      border-radius: 8px; font-family: 'Red Hat Mono', monospace; font-size: 0.9rem;
+      overflow-x: auto; margin: 16px 0;
+    }
+    .install-block .comment { color: #6a9955; }
+    .install-block .cmd { color: #dcdcaa; }
+
+    .doc-links { list-style: none; padding: 0; }
+    .doc-links li {
+      padding: 12px 0; border-bottom: 1px solid #e8e8e8;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .doc-links li:last-child { border-bottom: none; }
+    .doc-links a { font-size: 1rem; font-weight: 500; }
+    .doc-links .desc { color: #6a6e73; font-size: 0.85rem; }
+
+    .arch-table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+    .arch-table th, .arch-table td { padding: 10px 14px; text-align: left; border-bottom: 1px solid #d2d2d2; }
+    .arch-table th { background: #f0f0f0; font-weight: 600; font-size: 0.9rem; }
+    .arch-table td { font-size: 0.9rem; }
+
+    .site-footer {
+      background: #151515; color: #c9c9c9; padding: 32px 0; margin-top: 48px;
+    }
+    .site-footer .links { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 12px; }
+    .site-footer .links a { color: #73bcf7; font-size: 0.9rem; }
+    .site-footer .copy { font-size: 0.8rem; color: #6a6e73; }
+
+    code { background: #e8e8e8; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
+  </style>
+</head>
+<body>
+
+  <section class="hero">
+    <img src="assets/logo.svg" alt="GateForge Logo">
+    <h1>GateForge</h1>
+    <p>AI-powered migration platform for transitioning from Red Hat 3scale API Management to Red Hat Connectivity Link (Kuadrant) on OpenShift.</p>
+    <div class="badges">
+      <a href="https://artifacthub.io/packages/search?repo=gateforge"><img src="https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/gateforge" alt="Artifact Hub"></a>
+      <a href="https://quay.io/repository/maximilianopizarro/gateforge-backend"><img src="https://img.shields.io/badge/quay.io-backend-blue" alt="Quay Backend"></a>
+      <a href="https://quay.io/repository/maximilianopizarro/gateforge-frontend"><img src="https://img.shields.io/badge/quay.io-frontend-blue" alt="Quay Frontend"></a>
+      <img src="https://img.shields.io/badge/OpenShift-4.21-red" alt="OpenShift 4.21">
+      <img src="https://img.shields.io/badge/License-Apache%202.0-green" alt="License">
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>Start here</h2>
+      <div class="card-grid">
+        <div class="card">
+          <h3>Installation</h3>
+          <p>Install GateForge using Helm on OpenShift or run locally with Podman Compose.</p>
+          <div class="install-block">
+            <span class="comment"># Add the Helm repo</span><br>
+            <span class="cmd">helm repo add gateforge \<br>&nbsp; https://maximilianopizarro.github.io/gateforge/</span><br><br>
+            <span class="comment"># Install</span><br>
+            <span class="cmd">helm install gateforge gateforge/gateforge</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Local Development</h3>
+          <p>Run the full stack locally with Podman Compose for development and testing.</p>
+          <div class="install-block">
+            <span class="comment"># Clone the repo</span><br>
+            <span class="cmd">git clone https://github.com/maximilianoPizarro/gateforge.git</span><br><br>
+            <span class="comment"># Build and run</span><br>
+            <span class="cmd">podman-compose up -d --build</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Configuration</h3>
+          <p>All parameters are configurable via Helm values: AI model, 3scale credentials, gateway strategy, and more.</p>
+          <div class="install-block">
+            <span class="cmd">helm install gateforge gateforge/gateforge \<br>
+            &nbsp; --set ai.apiKey=YOUR_KEY \<br>
+            &nbsp; --set threescale.adminApi.url=URL \<br>
+            &nbsp; --set connectivityLink.gatewayStrategy=shared</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" style="background: #f5f5f5;">
+    <div class="container">
+      <h2>Architecture</h2>
+      <table class="arch-table">
+        <thead>
+          <tr><th>Layer</th><th>Technology</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>Frontend</strong></td><td>Angular 18, @rhds/elements</td><td>SPA with Red Hat Design System web components, served by Nginx (UBI9)</td></tr>
+          <tr><td><strong>Backend</strong></td><td>Quarkus 3.x, Java 17</td><td>REST API, AI agent, MCP servers, kuadrantctl integration</td></tr>
+          <tr><td><strong>AI</strong></td><td>LangChain4j, deepseek-r1</td><td>Migration analysis, resource generation, chat assistant via LiteLLM</td></tr>
+          <tr><td><strong>MCP Servers</strong></td><td>3scale, Connectivity Link, K8s</td><td>Tool calling for AI agent via Model Context Protocol</td></tr>
+          <tr><td><strong>Migration</strong></td><td>kuadrantctl, Fabric8</td><td>Generate HTTPRoute, AuthPolicy, RateLimitPolicy from 3scale configs</td></tr>
+          <tr><td><strong>Packaging</strong></td><td>Helm Chart, Podman</td><td>OpenShift deployment + local development</td></tr>
+        </tbody>
+      </table>
+
+      <h3 style="margin-top: 32px;">3scale to Connectivity Link Mapping</h3>
+      <table class="arch-table">
+        <thead><tr><th>3scale Object</th><th>Connectivity Link Resource</th></tr></thead>
+        <tbody>
+          <tr><td>Product</td><td>Gateway + HTTPRoute + AuthPolicy + RateLimitPolicy</td></tr>
+          <tr><td>Backend</td><td>Service/Endpoints (HTTPRoute backendRefs)</td></tr>
+          <tr><td>Mapping Rules</td><td>HTTPRoute rules (path, method matches)</td></tr>
+          <tr><td>Application Plans (limits)</td><td>RateLimitPolicy (rates, counters)</td></tr>
+          <tr><td>Auth (OAuth2, API Key)</td><td>AuthPolicy (via Authorino/Keycloak)</td></tr>
+          <tr><td>Proxy/Gateway config</td><td>Gateway listener configuration</td></tr>
+          <tr><td>DNS/TLS settings</td><td>DNSPolicy + TLSPolicy</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>Helm Chart Values</h2>
+      <table class="arch-table">
+        <thead><tr><th>Value</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>backend.image.tag</code></td><td>latest</td><td>Backend image tag</td></tr>
+          <tr><td><code>frontend.image.tag</code></td><td>latest</td><td>Frontend image tag</td></tr>
+          <tr><td><code>ai.enabled</code></td><td>true</td><td>Enable AI features</td></tr>
+          <tr><td><code>ai.endpoint</code></td><td>litellm-prod...</td><td>LLM endpoint URL (OpenAI-compatible)</td></tr>
+          <tr><td><code>ai.model</code></td><td>deepseek-r1-distill-qwen-14b</td><td>AI model name</td></tr>
+          <tr><td><code>ai.apiKey</code></td><td>""</td><td>LLM API key</td></tr>
+          <tr><td><code>threescale.adminApi.url</code></td><td>""</td><td>3scale Admin Portal URL</td></tr>
+          <tr><td><code>threescale.adminApi.accessToken</code></td><td>""</td><td>3scale access token</td></tr>
+          <tr><td><code>connectivityLink.gatewayStrategy</code></td><td>shared</td><td>shared / dual / dedicated</td></tr>
+          <tr><td><code>connectivityLink.gatewayClassName</code></td><td>istio</td><td>Gateway class name</td></tr>
+          <tr><td><code>rbac.clusterAdmin</code></td><td>true</td><td>Bind cluster-admin role</td></tr>
+          <tr><td><code>route.enabled</code></td><td>true</td><td>Create OpenShift Route</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="section" style="background: #f5f5f5;">
+    <div class="container">
+      <h2>Official Documentation</h2>
+      <ul class="doc-links">
+        <li>
+          <div>
+            <a href="https://docs.redhat.com/en/documentation/red_hat_connectivity_link" target="_blank">Red Hat Connectivity Link</a>
+            <div class="desc">Official Red Hat product documentation for Connectivity Link</div>
+          </div>
+        </li>
+        <li>
+          <div>
+            <a href="https://docs.kuadrant.io/" target="_blank">Kuadrant Documentation</a>
+            <div class="desc">Upstream project docs for AuthPolicy, RateLimitPolicy, DNSPolicy, TLSPolicy</div>
+          </div>
+        </li>
+        <li>
+          <div>
+            <a href="https://github.com/Kuadrant/kuadrantctl" target="_blank">kuadrantctl CLI</a>
+            <div class="desc">Generate Gateway API and Kuadrant resources from OpenAPI 3.x specs</div>
+          </div>
+        </li>
+        <li>
+          <div>
+            <a href="https://docs.redhat.com/en/documentation/red_hat_3scale_api_management" target="_blank">Red Hat 3scale API Management</a>
+            <div class="desc">Official documentation for 3scale, including Admin API reference</div>
+          </div>
+        </li>
+        <li>
+          <div>
+            <a href="https://github.com/3scale/3scale-operator" target="_blank">3scale Operator CRDs</a>
+            <div class="desc">Product, Backend, APIManager custom resource definitions</div>
+          </div>
+        </li>
+        <li>
+          <div>
+            <a href="https://gateway-api.sigs.k8s.io/" target="_blank">Kubernetes Gateway API</a>
+            <div class="desc">Official Gateway API specification for HTTPRoute, Gateway resources</div>
+          </div>
+        </li>
+        <li>
+          <div>
+            <a href="https://quarkus.io/blog/quarkus-langchain4j-mcp/" target="_blank">Quarkus LangChain4j + MCP</a>
+            <div class="desc">Using Model Context Protocol with Quarkus and LangChain4j</div>
+          </div>
+        </li>
+        <li>
+          <div>
+            <a href="https://ux.redhat.com/" target="_blank">Red Hat Design System</a>
+            <div class="desc">Web components and design tokens for Red Hat branded experiences</div>
+          </div>
+        </li>
+        <li>
+          <div>
+            <a href="https://onlu.ch/en/migration-path-from-red-hat-3scale-api-management-to-red-hat-connectivity-link/" target="_blank">Migration Guide (ONLU)</a>
+            <div class="desc">Detailed phased migration strategy from 3scale to Connectivity Link</div>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="links">
+        <a href="https://github.com/maximilianoPizarro/gateforge">GitHub</a>
+        <a href="https://quay.io/repository/maximilianopizarro/gateforge-backend">Quay.io Backend</a>
+        <a href="https://quay.io/repository/maximilianopizarro/gateforge-frontend">Quay.io Frontend</a>
+        <a href="https://docs.redhat.com/en/documentation/red_hat_connectivity_link">Connectivity Link</a>
+        <a href="https://docs.kuadrant.io/">Kuadrant</a>
+        <a href="https://github.com/Kuadrant/kuadrantctl">kuadrantctl</a>
+      </div>
+      <p class="copy">GateForge &copy; 2026 Maximiliano Pizarro &mdash; Apache 2.0 License</p>
+    </div>
+  </footer>
+
+</body>
+</html>
