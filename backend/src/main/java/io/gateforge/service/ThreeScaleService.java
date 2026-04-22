@@ -43,23 +43,53 @@ public class ThreeScaleService {
 
     /**
      * Returns products from both CRDs and Admin API, deduped by systemName.
+     * When both sources provide the same product, enriches the CRD product
+     * with Admin API data (mapping rules, backend usages, auth) when the CRD
+     * version is missing that information.
      */
     public List<ThreeScaleProduct> listProducts() {
-        Map<String, ThreeScaleProduct> merged = new LinkedHashMap<>();
+        Map<String, ThreeScaleProduct> crdProducts = new LinkedHashMap<>();
+        Map<String, ThreeScaleProduct> apiProducts = new LinkedHashMap<>();
 
         if (crdDiscoveryEnabled) {
             for (ThreeScaleProduct p : listProductsFromCrds()) {
-                merged.put(p.systemName(), p);
+                crdProducts.put(p.systemName(), p);
             }
         }
 
         if (adminApiClient.isConfigured()) {
             for (ThreeScaleProduct p : listProductsFromAdminApi()) {
-                merged.putIfAbsent(p.systemName(), p);
+                apiProducts.put(p.systemName(), p);
             }
         }
 
+        Map<String, ThreeScaleProduct> merged = new LinkedHashMap<>();
+        for (var entry : crdProducts.entrySet()) {
+            ThreeScaleProduct crd = entry.getValue();
+            ThreeScaleProduct api = apiProducts.remove(entry.getKey());
+            if (api != null) {
+                merged.put(entry.getKey(), enrichProduct(crd, api));
+            } else {
+                merged.put(entry.getKey(), crd);
+            }
+        }
+        merged.putAll(apiProducts);
         return new ArrayList<>(merged.values());
+    }
+
+    private ThreeScaleProduct enrichProduct(ThreeScaleProduct crd, ThreeScaleProduct api) {
+        List<ThreeScaleProduct.MappingRule> rules = crd.mappingRules().isEmpty()
+                ? api.mappingRules() : crd.mappingRules();
+        List<ThreeScaleProduct.BackendUsage> usages = crd.backendUsages().isEmpty()
+                ? api.backendUsages() : crd.backendUsages();
+        Map<String, Object> auth = (crd.authentication() == null || crd.authentication().isEmpty())
+                ? api.authentication() : crd.authentication();
+        String source = "CRD + Admin API";
+        return new ThreeScaleProduct(
+                crd.name(), crd.namespace(), crd.systemName(),
+                crd.description().isEmpty() ? api.description() : crd.description(),
+                crd.deploymentOption(), rules, usages, auth, source
+        );
     }
 
     public List<Map<String, Object>> listBackendsCombined() {
