@@ -43,10 +43,6 @@ type SourceTab = 'all' | 'crd' | 'admin-api';
             <span class="stat-value">{{ backends.length }}</span>
             <span class="stat-label">Backends</span>
           </div>
-          <div class="stat-pill accent">
-            <span class="stat-value">{{ totalMappingRules }}</span>
-            <span class="stat-label">Mapping Rules</span>
-          </div>
           <div class="stat-pill" *ngIf="crdCount > 0">
             <span class="stat-value">{{ crdCount }}</span>
             <span class="stat-label">from CRDs</span>
@@ -54,6 +50,14 @@ type SourceTab = 'all' | 'crd' | 'admin-api';
           <div class="stat-pill api-pill" *ngIf="apiCount > 0">
             <span class="stat-value">{{ apiCount }}</span>
             <span class="stat-label">from Admin API</span>
+          </div>
+          <div class="stat-pill accent" *ngIf="totalMappingRules > 0">
+            <span class="stat-value">{{ totalMappingRules }}</span>
+            <span class="stat-label">Mapping Rules</span>
+          </div>
+          <div class="stat-pill" *ngIf="totalMappingRules === 0">
+            <span class="stat-value">Auto</span>
+            <span class="stat-label">Path Discovery</span>
           </div>
         </div>
       </div>
@@ -105,7 +109,7 @@ type SourceTab = 'all' | 'crd' | 'admin-api';
                 <div class="title-row">
                   <h3 class="product-title">{{ product.name }}</h3>
                   <div class="badge-row">
-                    <span class="badge" [class.badge-crd]="product.source === 'CRD'" [class.badge-api]="product.source === 'Admin API'">{{ product.source }}</span>
+                    <span class="badge" [class.badge-crd]="product.source === 'CRD'" [class.badge-api]="product.source === 'Admin API'" [class.badge-merged]="product.source === 'CRD + Admin API'">{{ product.source }}</span>
                     <span class="badge badge-ns">{{ product.namespace }}</span>
                   </div>
                 </div>
@@ -113,7 +117,7 @@ type SourceTab = 'all' | 'crd' | 'admin-api';
                 <p class="desc">{{ product.description || 'No description' }}</p>
                 <div class="card-meta">
                   <span class="pill pill-muted">{{ product.deploymentOption || 'N/A' }}</span>
-                  <span class="pill pill-rules">{{ product.mappingRules.length }} rules</span>
+                  <span class="pill pill-rules">{{ product.mappingRules.length > 0 ? product.mappingRules.length + ' rules' : 'OpenAPI auto-discover' }}</span>
                   <span class="pill pill-backends">{{ product.backendUsages.length }} backends</span>
                 </div>
                 <p class="expand-hint">{{ expandedKey === productKey(product) ? 'Click to collapse' : 'Click to expand details' }}</p>
@@ -137,7 +141,7 @@ type SourceTab = 'all' | 'crd' | 'admin-api';
                       </tbody>
                     </table>
                   </div>
-                  <p *ngIf="product.mappingRules.length === 0" class="muted">No mapping rules.</p>
+                  <p *ngIf="product.mappingRules.length === 0" class="muted">No explicit mapping rules in 3scale. Paths will be auto-discovered from the backend's OpenAPI spec during migration.</p>
                 </div>
                 <div class="panel">
                   <h4>Backend Usages</h4>
@@ -280,6 +284,7 @@ type SourceTab = 'all' | 'crd' | 'admin-api';
     .badge-ns { background: #e6f0ff; color: #0066cc; }
     .badge-crd { background: #e6f5e0; color: #2d6b24; }
     .badge-api { background: #fff4e6; color: #8a5500; }
+    .badge-merged { background: #e8eaf6; color: #283593; }
     .badge-method { background: #f5f5f5; color: #151515; border: 1px solid #d2d2d2; }
 
     .system-name { margin: 10px 0 6px; font-size: 0.88rem; color: #6a6e73; }
@@ -376,27 +381,30 @@ export class ThreeScaleExplorerComponent implements OnInit {
 
   constructor(private api: ApiService) {}
 
-  get crdCount(): number { return this.products.filter(p => p.source === 'CRD').length; }
-  get apiCount(): number { return this.products.filter(p => p.source === 'Admin API').length; }
+  get crdCount(): number { return this.products.filter(p => p.source?.includes('CRD')).length; }
+  get apiCount(): number { return this.products.filter(p => p.source?.includes('Admin API')).length; }
   get totalMappingRules(): number { return this.products.reduce((n, p) => n + (p.mappingRules?.length || 0), 0); }
+
+  private isCrd(source?: string): boolean { return !!source && source.includes('CRD'); }
+  private isApi(source?: string): boolean { return !!source && source.includes('Admin API'); }
 
   get filteredProducts(): ThreeScaleProduct[] {
     if (this.activeTab === 'all') return this.products;
-    if (this.activeTab === 'crd') return this.products.filter(p => p.source === 'CRD');
-    return this.products.filter(p => p.source === 'Admin API');
+    if (this.activeTab === 'crd') return this.products.filter(p => this.isCrd(p.source));
+    return this.products.filter(p => this.isApi(p.source));
   }
 
   get filteredBackends(): ThreeScaleBackend[] {
     if (this.activeTab === 'all') return this.backends;
-    if (this.activeTab === 'crd') return this.backends.filter(b => b.source === 'CRD');
-    return this.backends.filter(b => b.source === 'Admin API');
+    if (this.activeTab === 'crd') return this.backends.filter(b => this.isCrd(b.source));
+    return this.backends.filter(b => this.isApi(b.source));
   }
 
   get tabs(): { key: SourceTab; label: string; count: number }[] {
     return [
       { key: 'all', label: 'All Sources', count: this.products.length + this.backends.length },
-      { key: 'crd', label: 'CRDs', count: this.products.filter(p => p.source === 'CRD').length + this.backends.filter(b => b.source === 'CRD').length },
-      { key: 'admin-api', label: 'Admin API', count: this.products.filter(p => p.source === 'Admin API').length + this.backends.filter(b => b.source === 'Admin API').length }
+      { key: 'crd', label: 'CRDs', count: this.products.filter(p => this.isCrd(p.source)).length + this.backends.filter(b => this.isCrd(b.source)).length },
+      { key: 'admin-api', label: 'Admin API', count: this.products.filter(p => this.isApi(p.source)).length + this.backends.filter(b => this.isApi(b.source)).length }
     ];
   }
 
