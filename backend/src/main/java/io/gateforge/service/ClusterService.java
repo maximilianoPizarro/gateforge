@@ -32,8 +32,12 @@ public class ClusterService {
         String name = ns.getMetadata().getName();
         String status = ns.getStatus() != null ? ns.getStatus().getPhase() : "Unknown";
         String created = ns.getMetadata().getCreationTimestamp();
-        boolean has3scale = hasResourceInNamespace(name, "apps.3scale.net", "v1alpha1", "products");
-        boolean hasKuadrant = hasResourceInNamespace(name, "kuadrant.io", "v1", "authpolicies");
+        boolean has3scale = hasResourceInNamespace(name, "capabilities.3scale.net", "v1beta1", "products")
+                || hasResourceInNamespace(name, "capabilities.3scale.net", "v1beta1", "backends")
+                || hasResourceInNamespace(name, "apps.3scale.net", "v1alpha1", "apimanagers");
+        boolean hasKuadrant = hasResourceInNamespace(name, "kuadrant.io", "v1", "authpolicies")
+                || hasResourceInNamespace(name, "kuadrant.io", "v1", "ratelimitpolicies")
+                || hasResourceInNamespace(name, "kuadrant.io", "v1", "kuadrants");
         return new ProjectInfo(name, status, created, has3scale, hasKuadrant);
     }
 
