@@ -33,7 +33,9 @@ ai:
   enabled: true
   endpoint: https://litellm-prod.apps.maas.redhatworkshops.io/v1
   model: deepseek-r1-distill-qwen-14b
-  apiKey: ""
+  # existingSecret: name of a pre-created Secret containing AI_API_KEY (not managed by Helm)
+  # If not set, defaults to <release>-ai-secret
+  existingSecret: ""
   temperature: "0.3"
   maxTokens: "4096"
 
