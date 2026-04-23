@@ -2,8 +2,8 @@ apiVersion: v2
 name: gateforge
 description: AI-powered 3scale to Red Hat Connectivity Link migration platform
 type: application
-version: 0.1.6
-appVersion: "0.1.6"
+version: 0.1.7
+appVersion: "0.1.7"
 icon: https://maximilianopizarro.github.io/gateforge/assets/logo.svg
 home: https://maximilianopizarro.github.io/gateforge/
 sources:

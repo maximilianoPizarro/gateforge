@@ -91,12 +91,25 @@ type SourceTab = 'all' | 'crd' | 'admin-api';
           </button>
         </div>
 
+        <!-- SEARCH -->
+        <div class="search-row">
+          <input type="text" class="search-input" placeholder="Filter by name, namespace, systemName…" [(ngModel)]="searchQuery" (ngModelChange)="onSearchChange()">
+          <span class="search-count" *ngIf="searchQuery">{{ filteredProducts.length }} products, {{ filteredBackends.length }} backends</span>
+        </div>
+
         <!-- PRODUCTS -->
         <div *ngIf="filteredProducts.length > 0">
-          <h2 class="section-title">Products <span class="count-pill">{{ filteredProducts.length }}</span></h2>
+          <div class="section-header-row">
+            <h2 class="section-title">Products <span class="count-pill">{{ filteredProducts.length }}</span></h2>
+            <div class="page-controls" *ngIf="productTotalPages > 1">
+              <button class="page-btn" (click)="productPage = productPage - 1" [disabled]="productPage <= 1">&laquo; Prev</button>
+              <span class="page-info">{{ productPage }} / {{ productTotalPages }}</span>
+              <button class="page-btn" (click)="productPage = productPage + 1" [disabled]="productPage >= productTotalPages">Next &raquo;</button>
+            </div>
+          </div>
           <div class="product-grid">
             <article
-              *ngFor="let product of filteredProducts; trackBy: trackByName"
+              *ngFor="let product of pagedProducts; trackBy: trackByName"
               class="product-card card"
               [class.expanded]="expandedKey === productKey(product)"
               [class.source-api]="product.source === 'Admin API'"
@@ -165,9 +178,16 @@ type SourceTab = 'all' | 'crd' | 'admin-api';
 
         <!-- BACKENDS -->
         <div *ngIf="filteredBackends.length > 0" class="backends-section">
-          <h2 class="section-title">Backends <span class="count-pill">{{ filteredBackends.length }}</span></h2>
+          <div class="section-header-row">
+            <h2 class="section-title">Backends <span class="count-pill">{{ filteredBackends.length }}</span></h2>
+            <div class="page-controls" *ngIf="backendTotalPages > 1">
+              <button class="page-btn" (click)="backendPage = backendPage - 1" [disabled]="backendPage <= 1">&laquo; Prev</button>
+              <span class="page-info">{{ backendPage }} / {{ backendTotalPages }}</span>
+              <button class="page-btn" (click)="backendPage = backendPage + 1" [disabled]="backendPage >= backendTotalPages">Next &raquo;</button>
+            </div>
+          </div>
           <div class="backend-grid">
-            <div *ngFor="let b of filteredBackends" class="backend-card card">
+            <div *ngFor="let b of pagedBackends" class="backend-card card">
               <div class="backend-head">
                 <strong>{{ b.name }}</strong>
                 <span class="badge" [class.badge-crd]="b.source === 'CRD'" [class.badge-api]="b.source === 'Admin API'">{{ b.source }}</span>
@@ -365,6 +385,31 @@ type SourceTab = 'all' | 'crd' | 'admin-api';
     .skeleton-line.medium { width: 55%; }
     .skeleton-line.short { width: 40%; }
 
+    .search-row {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;
+    }
+    .search-input {
+      flex: 1; min-width: 240px; padding: 10px 16px; border: 1px solid #d2d2d2;
+      border-radius: 6px; font-family: inherit; font-size: 0.92rem;
+      transition: border-color 0.15s;
+    }
+    .search-input:focus { outline: none; border-color: #ee0000; box-shadow: 0 0 0 3px rgba(238,0,0,0.12); }
+    .search-count { font-size: 0.82rem; color: #6a6e73; white-space: nowrap; }
+
+    .section-header-row {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      flex-wrap: wrap; margin-bottom: 14px;
+    }
+    .section-header-row .section-title { margin-bottom: 0; }
+    .page-controls { display: flex; align-items: center; gap: 8px; }
+    .page-btn {
+      padding: 6px 14px; border: 1px solid #d2d2d2; border-radius: 4px;
+      background: white; cursor: pointer; font-family: inherit; font-size: 0.82rem; font-weight: 600;
+    }
+    .page-btn:hover:not(:disabled) { border-color: #ee0000; color: #ee0000; }
+    .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .page-info { font-size: 0.82rem; color: #6a6e73; min-width: 60px; text-align: center; }
+
     @media (max-width: 768px) {
       .product-card.expanded { grid-column: auto; }
     }
@@ -378,6 +423,10 @@ export class ThreeScaleExplorerComponent implements OnInit {
   loadingStage = 'Connecting to cluster...';
   expandedKey: string | null = null;
   activeTab: SourceTab = 'all';
+  searchQuery = '';
+  productPage = 1;
+  backendPage = 1;
+  pageSize = 24;
 
   constructor(private api: ApiService) {}
 
@@ -388,16 +437,56 @@ export class ThreeScaleExplorerComponent implements OnInit {
   private isCrd(source?: string): boolean { return !!source && source.includes('CRD'); }
   private isApi(source?: string): boolean { return !!source && source.includes('Admin API'); }
 
+  private matchesSearch(text: string): boolean {
+    if (!this.searchQuery) return true;
+    const q = this.searchQuery.toLowerCase();
+    return text.toLowerCase().includes(q);
+  }
+
   get filteredProducts(): ThreeScaleProduct[] {
-    if (this.activeTab === 'all') return this.products;
-    if (this.activeTab === 'crd') return this.products.filter(p => this.isCrd(p.source));
-    return this.products.filter(p => this.isApi(p.source));
+    let items = this.products;
+    if (this.activeTab === 'crd') items = items.filter(p => this.isCrd(p.source));
+    else if (this.activeTab === 'admin-api') items = items.filter(p => this.isApi(p.source));
+    if (this.searchQuery) {
+      items = items.filter(p =>
+        this.matchesSearch(p.name) || this.matchesSearch(p.systemName || '') ||
+        this.matchesSearch(p.namespace || '') || this.matchesSearch(p.backendNamespace || '') ||
+        this.matchesSearch(p.description || '')
+      );
+    }
+    return items;
   }
 
   get filteredBackends(): ThreeScaleBackend[] {
-    if (this.activeTab === 'all') return this.backends;
-    if (this.activeTab === 'crd') return this.backends.filter(b => this.isCrd(b.source));
-    return this.backends.filter(b => this.isApi(b.source));
+    let items = this.backends;
+    if (this.activeTab === 'crd') items = items.filter(b => this.isCrd(b.source));
+    else if (this.activeTab === 'admin-api') items = items.filter(b => this.isApi(b.source));
+    if (this.searchQuery) {
+      items = items.filter(b =>
+        this.matchesSearch(b.name) || this.matchesSearch(b.systemName || '') ||
+        this.matchesSearch(b.namespace || '') || this.matchesSearch(b.privateEndpoint || '') ||
+        this.matchesSearch(b.description || '')
+      );
+    }
+    return items;
+  }
+
+  get productTotalPages(): number { return Math.max(1, Math.ceil(this.filteredProducts.length / this.pageSize)); }
+  get backendTotalPages(): number { return Math.max(1, Math.ceil(this.filteredBackends.length / this.pageSize)); }
+
+  get pagedProducts(): ThreeScaleProduct[] {
+    const start = (this.productPage - 1) * this.pageSize;
+    return this.filteredProducts.slice(start, start + this.pageSize);
+  }
+
+  get pagedBackends(): ThreeScaleBackend[] {
+    const start = (this.backendPage - 1) * this.pageSize;
+    return this.filteredBackends.slice(start, start + this.pageSize);
+  }
+
+  onSearchChange(): void {
+    this.productPage = 1;
+    this.backendPage = 1;
   }
 
   get tabs(): { key: SourceTab; label: string; count: number }[] {
@@ -437,7 +526,7 @@ export class ThreeScaleExplorerComponent implements OnInit {
     });
   }
 
-  setTab(tab: SourceTab): void { this.activeTab = tab; }
+  setTab(tab: SourceTab): void { this.activeTab = tab; this.productPage = 1; this.backendPage = 1; }
 
   productKey(p: ThreeScaleProduct): string { return `${p.source}/${p.namespace}/${p.name}`; }
 

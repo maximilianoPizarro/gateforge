@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { timeout, retry } from 'rxjs/operators';
 
 export interface ProjectInfo {
   name: string;
@@ -128,11 +129,17 @@ export class ApiService {
   }
 
   getProducts(): Observable<ThreeScaleProduct[]> {
-    return this.http.get<ThreeScaleProduct[]>(`${this.baseUrl}/threescale/products`);
+    return this.http.get<ThreeScaleProduct[]>(`${this.baseUrl}/threescale/products`).pipe(
+      timeout(120000),
+      retry({ count: 1, delay: 3000 })
+    );
   }
 
   getBackends(): Observable<ThreeScaleBackend[]> {
-    return this.http.get<ThreeScaleBackend[]>(`${this.baseUrl}/threescale/backends`);
+    return this.http.get<ThreeScaleBackend[]>(`${this.baseUrl}/threescale/backends`).pipe(
+      timeout(120000),
+      retry({ count: 1, delay: 3000 })
+    );
   }
 
   getThreeScaleStatus(): Observable<ThreeScaleStatus> {

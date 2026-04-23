@@ -55,6 +55,7 @@ import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult, FeatureFlags
         <div class="step-head">
           <h2>Select products</h2>
           <span class="count-badge" *ngIf="selectedCount > 0">{{ selectedCount }} selected</span>
+          <span class="total-badge">{{ products.length }} total</span>
         </div>
         <p class="step-desc">Choose one or more 3scale products to include in the migration analysis.</p>
 
@@ -62,21 +63,34 @@ import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult, FeatureFlags
           <p>No products were found. Explore the cluster in <a routerLink="/threescale">3scale Explorer</a> or verify CRDs.</p>
         </div>
 
-        <div *ngIf="products.length > 0" class="select-grid">
-          <label *ngFor="let p of products" class="select-card card" [class.checked]="p.selected">
-            <input type="checkbox" class="visually-hidden" [(ngModel)]="p.selected" (click)="$event.stopPropagation()">
-            <div class="check-corner" [class.on]="p.selected"></div>
-            <div class="select-body">
-              <div class="select-title-row">
-                <span class="product-name">{{ p.product.name }}</span>
-                <span class="badge badge-ns">{{ p.product.backendNamespace || p.product.namespace }}</span>
+        <div *ngIf="products.length > 0">
+          <div class="search-row">
+            <input type="text" class="search-input" placeholder="Filter by name, namespace…" [(ngModel)]="productSearchQuery" (ngModelChange)="onProductSearchChange()">
+            <button type="button" class="btn-select-filtered" (click)="selectAllFiltered()">
+              {{ allFilteredSelected ? 'Deselect' : 'Select' }} filtered ({{ visibleProducts.length }})
+            </button>
+          </div>
+          <div class="select-grid">
+            <label *ngFor="let p of pagedMigrateProducts" class="select-card card" [class.checked]="p.selected">
+              <input type="checkbox" class="visually-hidden" [(ngModel)]="p.selected" (click)="$event.stopPropagation()">
+              <div class="check-corner" [class.on]="p.selected"></div>
+              <div class="select-body">
+                <div class="select-title-row">
+                  <span class="product-name">{{ p.product.name }}</span>
+                  <span class="badge badge-ns">{{ p.product.backendNamespace || p.product.namespace }}</span>
+                </div>
+                <div class="select-stats">
+                  <span class="pill" *ngIf="p.product.backendServiceName">{{ p.product.backendServiceName }}</span>
+                  <span class="pill pill-green">{{ p.product.backendUsages.length }} backends</span>
+                </div>
               </div>
-              <div class="select-stats">
-                <span class="pill" *ngIf="p.product.backendServiceName">{{ p.product.backendServiceName }}</span>
-                <span class="pill pill-green">{{ p.product.backendUsages.length }} backends</span>
-              </div>
-            </div>
-          </label>
+            </label>
+          </div>
+          <div class="page-controls-bar" *ngIf="migrateTotalPages > 1">
+            <button class="page-btn" (click)="migrateProductPage = migrateProductPage - 1" [disabled]="migrateProductPage <= 1">&laquo; Prev</button>
+            <span class="page-info">Page {{ migrateProductPage }} of {{ migrateTotalPages }}</span>
+            <button class="page-btn" (click)="migrateProductPage = migrateProductPage + 1" [disabled]="migrateProductPage >= migrateTotalPages">Next &raquo;</button>
+          </div>
         </div>
 
         <div class="actions">
@@ -763,6 +777,36 @@ import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult, FeatureFlags
     .history-id { font-weight: 600; font-family: 'Red Hat Mono', monospace; font-size: 0.88rem; }
     .badge-active { background: #e6f5e0; color: #2d6b24; }
     .badge-reverted { background: #f5f5f5; color: #6a6e73; }
+
+    .total-badge {
+      font-size: 0.78rem; color: #6a6e73; padding: 4px 12px;
+      background: #f5f5f5; border-radius: 999px; border: 1px solid #d2d2d2;
+    }
+    .search-row {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;
+    }
+    .search-input {
+      flex: 1; min-width: 240px; padding: 10px 16px; border: 1px solid #d2d2d2;
+      border-radius: 6px; font-family: inherit; font-size: 0.92rem;
+    }
+    .search-input:focus { outline: none; border-color: #ee0000; box-shadow: 0 0 0 3px rgba(238,0,0,0.12); }
+    .btn-select-filtered {
+      padding: 8px 16px; border: 1px solid #d2d2d2; border-radius: 6px;
+      background: white; cursor: pointer; font-family: inherit; font-size: 0.85rem;
+      font-weight: 600; white-space: nowrap;
+    }
+    .btn-select-filtered:hover { border-color: #ee0000; color: #ee0000; }
+    .page-controls-bar {
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      margin: 16px 0;
+    }
+    .page-btn {
+      padding: 6px 14px; border: 1px solid #d2d2d2; border-radius: 4px;
+      background: white; cursor: pointer; font-family: inherit; font-size: 0.82rem; font-weight: 600;
+    }
+    .page-btn:hover:not(:disabled) { border-color: #ee0000; color: #ee0000; }
+    .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .page-info { font-size: 0.82rem; color: #6a6e73; }
   `]
 })
 export class MigrationWizardComponent implements OnInit {
@@ -789,6 +833,9 @@ export class MigrationWizardComponent implements OnInit {
   deleteGateway = false;
   bulkReverting = false;
   bulkResult: BulkRevertResult | null = null;
+  productSearchQuery = '';
+  migrateProductPage = 1;
+  migratePageSize = 24;
 
   strategies = [
     {
@@ -813,6 +860,36 @@ export class MigrationWizardComponent implements OnInit {
 
   get selectedCount(): number {
     return this.products.filter(p => p.selected).length;
+  }
+
+  get visibleProducts(): { product: ThreeScaleProduct; selected: boolean }[] {
+    if (!this.productSearchQuery) return this.products;
+    const q = this.productSearchQuery.toLowerCase();
+    return this.products.filter(p =>
+      p.product.name.toLowerCase().includes(q) ||
+      (p.product.namespace || '').toLowerCase().includes(q) ||
+      (p.product.backendNamespace || '').toLowerCase().includes(q) ||
+      (p.product.systemName || '').toLowerCase().includes(q)
+    );
+  }
+
+  get migrateTotalPages(): number { return Math.max(1, Math.ceil(this.visibleProducts.length / this.migratePageSize)); }
+
+  get pagedMigrateProducts(): { product: ThreeScaleProduct; selected: boolean }[] {
+    const start = (this.migrateProductPage - 1) * this.migratePageSize;
+    return this.visibleProducts.slice(start, start + this.migratePageSize);
+  }
+
+  get allFilteredSelected(): boolean {
+    const vis = this.visibleProducts;
+    return vis.length > 0 && vis.every(p => p.selected);
+  }
+
+  onProductSearchChange(): void { this.migrateProductPage = 1; }
+
+  selectAllFiltered(): void {
+    const target = !this.allFilteredSelected;
+    this.visibleProducts.forEach(p => p.selected = target);
   }
 
   constructor(private api: ApiService) {}
