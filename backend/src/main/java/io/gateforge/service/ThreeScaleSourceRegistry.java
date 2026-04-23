@@ -22,8 +22,8 @@ public class ThreeScaleSourceRegistry {
     @ConfigProperty(name = "gateforge.threescale.access-token", defaultValue = "none")
     String defaultAccessToken;
 
-    @ConfigProperty(name = "gateforge.threescale.sources", defaultValue = "")
-    String sourcesJson;
+    @ConfigProperty(name = "gateforge.threescale.sources")
+    Optional<String> sourcesJson;
 
     @Inject
     ObjectMapper objectMapper;
@@ -40,9 +40,9 @@ public class ThreeScaleSourceRegistry {
             addSource(defaultSource);
         }
 
-        if (sourcesJson != null && !sourcesJson.isBlank()) {
+        if (sourcesJson.isPresent() && !sourcesJson.get().isBlank()) {
             try {
-                ThreeScaleSource[] extraSources = objectMapper.readValue(sourcesJson, ThreeScaleSource[].class);
+                ThreeScaleSource[] extraSources = objectMapper.readValue(sourcesJson.get(), ThreeScaleSource[].class);
                 for (ThreeScaleSource src : extraSources) {
                     if (src.enabled()) addSource(src);
                 }

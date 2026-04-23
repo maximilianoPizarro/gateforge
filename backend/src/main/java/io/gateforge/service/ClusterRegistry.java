@@ -27,8 +27,8 @@ public class ClusterRegistry {
     @Inject
     ObjectMapper objectMapper;
 
-    @ConfigProperty(name = "gateforge.target-clusters", defaultValue = "")
-    String clustersJson;
+    @ConfigProperty(name = "gateforge.target-clusters")
+    Optional<String> clustersJson;
 
     @ConfigProperty(name = "gateforge.argocd.cluster-discovery", defaultValue = "false")
     boolean argocdDiscovery;
@@ -42,9 +42,9 @@ public class ClusterRegistry {
         clusters.put("local", local);
         clients.put("local", localClient);
 
-        if (clustersJson != null && !clustersJson.isBlank()) {
+        if (clustersJson.isPresent() && !clustersJson.get().isBlank()) {
             try {
-                TargetCluster[] extras = objectMapper.readValue(clustersJson, TargetCluster[].class);
+                TargetCluster[] extras = objectMapper.readValue(clustersJson.get(), TargetCluster[].class);
                 for (TargetCluster tc : extras) {
                     if (tc.enabled()) addCluster(tc);
                 }
