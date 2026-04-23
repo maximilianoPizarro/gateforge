@@ -91,7 +91,7 @@ public class ThreeScaleAdminApiClient {
 
     public List<Map<String, Object>> listApplications(long serviceId) {
         return fetchPaginatedList(
-                "/admin/api/services/" + serviceId + "/applications.json",
+                "/admin/api/applications.json?service_id=" + serviceId,
                 "applications", "application");
     }
 
