@@ -396,36 +396,28 @@ public class MigrationService {
             String namespace, String gatewayName, String gwNamespace,
             String productSysName, String hostname) {
         yaml = yaml.replace("\r\n", "\n").replace("\r", "\n");
-
         yaml = yaml.replaceAll("(?m)^\\s*creationTimestamp:\\s*null\\s*\\n", "");
+        yaml = yaml.replaceAll("(?m)^\\s*status:\\s*\\n(\\s+\\S+.*\\n)*", "");
 
-        yaml = yaml.replaceFirst("(?m)^  name: .*$", "  name: " + name);
-        yaml = yaml.replaceFirst("(?m)^  namespace: .*$", "  namespace: " + namespace);
-        if (!yaml.contains("namespace:")) {
-            yaml = yaml.replaceFirst("(?m)(  name: " + name + ")", "$1\n  namespace: " + namespace);
+        String metadataBlock = "metadata:\n"
+                + "  name: " + name + "\n"
+                + "  namespace: " + namespace + "\n"
+                + "  labels:\n"
+                + "    app.kubernetes.io/managed-by: gateforge\n"
+                + "    \"gateforge.io/product\": \"" + productSysName + "\"";
+        yaml = yaml.replaceFirst("(?m)^metadata:(\\s*\\n(\\s+.*\\n)*?)(?=^\\S)", metadataBlock + "\n");
+        if (!yaml.contains("  name: " + name)) {
+            yaml = yaml.replaceFirst("(?m)^metadata:", metadataBlock);
         }
 
-        String labelLine = "    \"gateforge.io/product\": \"" + productSysName + "\"";
-        if (yaml.contains("  labels:")) {
-            yaml = yaml.replaceFirst("(?m)^  labels:\\n", "  labels:\n    app.kubernetes.io/managed-by: gateforge\n" + labelLine + "\n");
-        } else {
-            String labelsBlock = "metadata:\n"
-                    + "  labels:\n"
-                    + "    app.kubernetes.io/managed-by: gateforge\n"
-                    + labelLine;
-            yaml = yaml.replaceFirst("(?m)^metadata:", labelsBlock);
-        }
-
-        if ("HTTPRoute".equals(kind)) {
-            if (gatewayName != null && !yaml.contains("parentRefs")) {
-                String specBlock = "spec:\n"
-                        + "  hostnames:\n"
-                        + "    - " + hostname + "\n"
-                        + "  parentRefs:\n"
-                        + "    - name: " + gatewayName + "\n"
-                        + "      namespace: " + gwNamespace;
-                yaml = yaml.replaceFirst("(?m)^spec:", specBlock);
-            }
+        if ("HTTPRoute".equals(kind) && gatewayName != null && !yaml.contains("parentRefs")) {
+            String specBlock = "spec:\n"
+                    + "  hostnames:\n"
+                    + "    - " + hostname + "\n"
+                    + "  parentRefs:\n"
+                    + "    - name: " + gatewayName + "\n"
+                    + "      namespace: " + gwNamespace;
+            yaml = yaml.replaceFirst("(?m)^spec:", specBlock);
         }
 
         return yaml;

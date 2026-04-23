@@ -99,7 +99,7 @@
     .compat-compatible { background: #e0ecff; color: #0066cc; }
 
     .screenshot-grid {
-      display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(520px, 1fr));
       gap: 24px; margin: 24px 0;
     }
     .screenshot {
@@ -176,6 +176,7 @@
       <a href="https://artifacthub.io/packages/search?repo=gateforge"><img src="https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/gateforge" alt="Artifact Hub"></a>
       <a href="https://quay.io/repository/maximilianopizarro/gateforge-backend"><img src="https://img.shields.io/badge/quay.io-backend-blue" alt="Quay Backend"></a>
       <a href="https://quay.io/repository/maximilianopizarro/gateforge-frontend"><img src="https://img.shields.io/badge/quay.io-frontend-blue" alt="Quay Frontend"></a>
+      <a href="https://quay.io/repository/maximilianopizarro/gateforge-devhub-plugin"><img src="https://img.shields.io/badge/quay.io-devhub--plugin-blue" alt="Quay DevHub Plugin"></a>
       <img src="https://img.shields.io/badge/OpenShift-4.20%2B-red" alt="OpenShift 4.20+">
       <img src="https://img.shields.io/badge/License-Apache%202.0-green" alt="License">
     </div>
@@ -240,6 +241,21 @@
           <h4>FAQ Cache with Data Grid</h4>
           <p>Common AI chat questions are pre-answered and cached in Red Hat Data Grid. Instant responses for FAQ queries, with a badge indicating cached vs. AI-generated answers.</p>
         </div>
+        <div class="phase-card">
+          <span class="phase-badge" style="background:#e8eaf6;color:#283593;">Phase 4</span>
+          <h4>Connectivity Link 1.3 CRDs</h4>
+          <p>Generates <code>APIProduct</code>, <code>PlanPolicy</code>, and <code>APIKey</code> CRDs from 3scale Application Plans, credentials, and product metadata. Full migration of rate-limit tiers and consumer keys.</p>
+        </div>
+        <div class="phase-card">
+          <span class="phase-badge" style="background:#fff3e0;color:#e65100;">Optional</span>
+          <h4>Observability &amp; Metrics</h4>
+          <p>Optional OpenTelemetry export with Prometheus <code>ServiceMonitor</code> and Grafana dashboard. Custom metrics: migrations, products discovered, AI chat requests, migration duration.</p>
+        </div>
+        <div class="phase-card">
+          <span class="phase-badge" style="background:#e6f5e0;color:#2d6b24;">Developer Hub</span>
+          <h4>GateForge DevHub Plugin</h4>
+          <p>Standalone webhook-based plugin deployed in Developer Hub namespace. Receives migration events and generates Backstage <code>Component</code> entities linked to Kuadrant API resources.</p>
+        </div>
       </div>
     </div>
   </section>
@@ -294,6 +310,9 @@
           <tr><td>Red Hat Developer Hub</td><td>1.9.x</td><td><span class="compat-badge compat-tested">Tested</span></td></tr>
           <tr><td>3scale Plugin for Developer Hub</td><td>3.10.x (backstage-community-plugin-3scale-backend)</td><td><span class="compat-badge compat-tested">Tested</span></td></tr>
           <tr><td>kuadrantctl</td><td>0.10.x</td><td><span class="compat-badge compat-tested">Tested</span></td></tr>
+          <tr><td>GateForge DevHub Plugin</td><td>0.1.7 (<code>quay.io/maximilianopizarro/gateforge-devhub-plugin</code>)</td><td><span class="compat-badge compat-tested">Tested</span></td></tr>
+          <tr><td>OpenTelemetry Operator</td><td>0.x (Collector + Instrumentation)</td><td><span class="compat-badge compat-compatible">Compatible</span></td></tr>
+          <tr><td>Grafana Operator</td><td>5.x</td><td><span class="compat-badge compat-compatible">Compatible</span></td></tr>
         </tbody>
       </table>
     </div>
@@ -405,27 +424,55 @@ flowchart TD
       </div>
 
       <div class="mermaid-wrapper">
-        <h3>Developer Hub — 3scale Auto-Discovery Integration</h3>
+        <h3>Developer Hub — 3scale Auto-Discovery + GateForge Plugin</h3>
         <pre class="mermaid">
 sequenceDiagram
   participant ThreeScale as 3scale Admin API
-  participant Plugin as RHDH 3scale Plugin
+  participant Plugin3s as RHDH 3scale Plugin
   participant Catalog as RHDH Catalog
-  participant GateForge as GateForge
+  participant GateForge as GateForge Backend
+  participant PluginGF as GateForge DevHub Plugin
   participant K8s as OpenShift Cluster
 
-  Plugin->>ThreeScale: Poll products (every 5 min)
-  ThreeScale-->>Plugin: Product list
-  Plugin->>Catalog: Create/update API entities
-  Note over Catalog: API: neuralbank-stack, API: nfl-wallet-apikey (auto-discovered, tagged 3scale)
+  Plugin3s->>ThreeScale: Poll products (every 5 min)
+  ThreeScale-->>Plugin3s: Product list
+  Plugin3s->>Catalog: Create/update API entities
+  Note over Catalog: API entities auto-discovered from 3scale
 
-  GateForge->>ThreeScale: Discover products
-  GateForge->>GateForge: Generate migration plan (kuadrantctl + AI verify)
-  Note over GateForge: Gateway + HTTPRoute + AuthPolicy + RateLimitPolicy + Component catalog-info
+  GateForge->>ThreeScale: Discover products + plans + credentials
+  GateForge->>GateForge: Generate resources (kuadrantctl + AI)
+  Note over GateForge: HTTPRoute + AuthPolicy + RateLimitPolicy + APIProduct + PlanPolicy + APIKey
 
   GateForge->>K8s: Apply Kuadrant resources
-  GateForge->>Catalog: Register Component entity
-  Note over Catalog: Component: neuralbank-stack-connectivity-link (providesApis: neuralbank-stack, tagged gateforge-migrated)
+  GateForge->>PluginGF: POST /migration-event (webhook)
+  PluginGF->>PluginGF: Build Component entity
+  PluginGF-->>GateForge: 200 accepted
+  Note over PluginGF: Component linked to Kuadrant resources via annotations
+        </pre>
+      </div>
+
+      <div class="mermaid-wrapper">
+        <h3>Phase 4 &mdash; Generated CRDs per Product</h3>
+        <pre class="mermaid">
+flowchart LR
+  Product["3scale Product"] --> Gateway["Gateway"]
+  Product --> HTTPRoute["HTTPRoute"]
+  Product --> AuthPolicy["AuthPolicy"]
+  Product --> RateLimit["RateLimitPolicy"]
+  Product --> APIProduct["APIProduct<br/>(devportal.kuadrant.io)"]
+  Product --> Route["OpenShift Route"]
+
+  Plans["Application Plans"] --> PlanPolicy["PlanPolicy<br/>(extensions.kuadrant.io)"]
+  Keys["Application Keys"] --> APIKey["APIKey<br/>(devportal.kuadrant.io)"]
+
+  Observability{"Observability<br/>enabled?"} -->|Yes| TelemetryPolicy["TelemetryPolicy<br/>(extensions.kuadrant.io)"]
+  Observability -->|No| Skip["Skipped"]
+
+  style APIProduct fill:#e6f5e0,stroke:#2d6b24
+  style PlanPolicy fill:#e0ecff,stroke:#0066cc
+  style APIKey fill:#e0ecff,stroke:#0066cc
+  style TelemetryPolicy fill:#fff3e0,stroke:#e65100
+  style Skip fill:#f5f5f5,stroke:#999
         </pre>
       </div>
 
@@ -473,13 +520,15 @@ sequenceDiagram
       <table class="arch-table">
         <thead><tr><th>3scale Object</th><th>Connectivity Link Resource</th></tr></thead>
         <tbody>
-          <tr><td>Product</td><td>Gateway + HTTPRoute + AuthPolicy + RateLimitPolicy</td></tr>
+          <tr><td>Product</td><td>Gateway + HTTPRoute + AuthPolicy + RateLimitPolicy + <strong>APIProduct</strong></td></tr>
           <tr><td>Backend</td><td>Service/Endpoints (HTTPRoute backendRefs)</td></tr>
           <tr><td>Mapping Rules</td><td>HTTPRoute rules (path, method matches)</td></tr>
-          <tr><td>Application Plans (limits)</td><td>RateLimitPolicy (rates, counters)</td></tr>
+          <tr><td>Application Plans (limits)</td><td>RateLimitPolicy + <strong>PlanPolicy</strong> (rates, counters, tier mapping)</td></tr>
+          <tr><td>Application Keys / Credentials</td><td><strong>APIKey</strong> (consumer credentials linked to APIProduct)</td></tr>
           <tr><td>Auth (OAuth2, API Key)</td><td>AuthPolicy (via Authorino/Keycloak)</td></tr>
           <tr><td>Proxy/Gateway config</td><td>Gateway listener configuration</td></tr>
           <tr><td>DNS/TLS settings</td><td>DNSPolicy + TLSPolicy</td></tr>
+          <tr><td>Metrics / Analytics</td><td><strong>TelemetryPolicy</strong> (optional, via OpenTelemetry)</td></tr>
         </tbody>
       </table>
     </div>
@@ -667,8 +716,12 @@ sequenceDiagram
           <tr><td><code>route.enabled</code></td><td>true</td><td>Create OpenShift Route</td></tr>
           <tr><td><code>developerHub.enabled</code></td><td>false</td><td>Enable Developer Hub catalog-info generation</td></tr>
           <tr><td><code>developerHub.url</code></td><td>""</td><td>Developer Hub URL for component registration</td></tr>
+          <tr><td><code>developerHub.pluginWebhookUrl</code></td><td>""</td><td>GateForge DevHub Plugin webhook URL</td></tr>
           <tr><td><code>datagrid.enabled</code></td><td>true</td><td>Deploy Data Grid for caching</td></tr>
           <tr><td><code>datagrid.cacheTtlSeconds</code></td><td>3600</td><td>Cache TTL for 3scale products/backends</td></tr>
+          <tr><td><code>observability.enabled</code></td><td>false</td><td>Enable OpenTelemetry + metrics export</td></tr>
+          <tr><td><code>observability.serviceMonitor.enabled</code></td><td>false</td><td>Deploy Prometheus ServiceMonitor</td></tr>
+          <tr><td><code>observability.grafanaDashboard.enabled</code></td><td>false</td><td>Deploy Grafana dashboard ConfigMap</td></tr>
         </tbody>
       </table>
     </div>
@@ -696,6 +749,7 @@ sequenceDiagram
         <a href="https://github.com/maximilianoPizarro/gateforge">GitHub</a>
         <a href="https://quay.io/repository/maximilianopizarro/gateforge-backend">Quay.io Backend</a>
         <a href="https://quay.io/repository/maximilianopizarro/gateforge-frontend">Quay.io Frontend</a>
+        <a href="https://quay.io/repository/maximilianopizarro/gateforge-devhub-plugin">Quay.io DevHub Plugin</a>
         <a href="https://docs.redhat.com/en/documentation/red_hat_connectivity_link">Connectivity Link</a>
         <a href="https://docs.kuadrant.io/">Kuadrant</a>
         <a href="https://github.com/Kuadrant/kuadrantctl">kuadrantctl</a>
