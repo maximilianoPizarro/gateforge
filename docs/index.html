@@ -183,22 +183,47 @@
 
   <section class="section" style="background:#f5f5f5;">
     <div class="container">
-      <h2>What's New in v0.1.7</h2>
+      <h2>Product Features</h2>
       <div class="phase-grid">
         <div class="phase-card">
-          <span class="phase-badge phase-done">Implemented</span>
-          <h4>Phase 1 &mdash; Multiple 3scale Sources</h4>
-          <p>Connect to N 3scale Admin API endpoints. Products tagged by source cluster. REST API for source management. <code>THREESCALE_SOURCES</code> env var for JSON config.</p>
+          <span class="phase-badge" style="background:#fce4ec;color:#880e4f;">AI-Powered</span>
+          <h4>Intelligent Migration Analysis</h4>
+          <p>LangChain4j-based AI agent analyzes 3scale configurations and generates equivalent Connectivity Link resources. Chat assistant with MCP tool calling for real-time cluster introspection.</p>
         </div>
         <div class="phase-card">
-          <span class="phase-badge phase-done">Implemented</span>
-          <h4>Phase 2 &mdash; Multi-Cluster Deployment</h4>
-          <p>Target cluster selector in Migration Wizard. ArgoCD cluster secret auto-discovery. Per-cluster RBAC validation. Dynamic Fabric8 KubernetesClient per target.</p>
+          <span class="phase-badge" style="background:#e0ecff;color:#0066cc;">Discovery</span>
+          <h4>Automatic 3scale Discovery</h4>
+          <p>Discovers Products, Backends, Mapping Rules, and ActiveDocs via both CRD inspection and Admin API. Supports connecting to multiple 3scale instances simultaneously.</p>
         </div>
         <div class="phase-card">
-          <span class="phase-badge phase-done">Implemented</span>
-          <h4>Phase 3 &mdash; Hub-Spoke Architecture</h4>
-          <p>PostgreSQL persistence for plans and audit. <strong>Flyway</strong> versioned schema migrations. Federated audit log with filtering. Hub overview API. Topology graph of all clusters and sources.</p>
+          <span class="phase-badge" style="background:#e6f5e0;color:#2d6b24;">Generation</span>
+          <h4>Gateway API Resource Generation</h4>
+          <p>Generates Gateway, HTTPRoute, AuthPolicy, and RateLimitPolicy resources with configurable strategies: shared, dual, or dedicated gateways per product.</p>
+        </div>
+        <div class="phase-card">
+          <span class="phase-badge" style="background:#fff3e0;color:#e65100;">Multi-Cluster</span>
+          <h4>Multi-Cluster Deployment</h4>
+          <p>Apply migrations to any target OpenShift cluster. ArgoCD cluster secret auto-discovery. Per-cluster RBAC validation via SelfSubjectAccessReview.</p>
+        </div>
+        <div class="phase-card">
+          <span class="phase-badge" style="background:#e8eaf6;color:#283593;">Hub-Spoke</span>
+          <h4>Centralized Control Plane</h4>
+          <p>PostgreSQL-backed persistence with Flyway migrations. Federated audit log across clusters. Hub overview API with aggregated stats and topology graph.</p>
+        </div>
+        <div class="phase-card">
+          <span class="phase-badge" style="background:#fce4ec;color:#880e4f;">Revert</span>
+          <h4>Safe Rollback to 3scale</h4>
+          <p>One-click revert of individual plans or bulk revert to restore 3scale management. Full audit trail with before/after YAML snapshots for every operation.</p>
+        </div>
+        <div class="phase-card">
+          <span class="phase-badge" style="background:#e0ecff;color:#0066cc;">GitOps</span>
+          <h4>Helm Chart &amp; ArgoCD Ready</h4>
+          <p>Packaged as a Helm chart on Artifact Hub. Deploys backend, frontend, and PostgreSQL with least-privilege RBAC. ArgoCD-native with selfHeal support.</p>
+        </div>
+        <div class="phase-card">
+          <span class="phase-badge" style="background:#e6f5e0;color:#2d6b24;">Developer Hub</span>
+          <h4>Backstage Integration</h4>
+          <p>Generates <code>catalog-info.yaml</code> for Red Hat Developer Hub. Registers migrated APIs as Backstage entities with Kuadrant annotations.</p>
         </div>
       </div>
     </div>
@@ -272,19 +297,19 @@
           <h4>3scale Explorer &mdash; Products &amp; Backends</h4>
         </div>
         <div class="screenshot" onclick="openLightbox(this)">
-          <img src="assets/screenshots/migration-step1.png" alt="Migration Wizard" loading="lazy">
+          <img src="assets/screenshots/migration-wizard.png" alt="Migration Wizard" loading="lazy">
           <span class="zoom-hint">Click to enlarge</span>
           <h4>Migration Wizard &mdash; Product Selection</h4>
         </div>
         <div class="screenshot" onclick="openLightbox(this)">
           <img src="assets/screenshots/chat-assistant.png" alt="AI Chat Assistant" loading="lazy">
           <span class="zoom-hint">Click to enlarge</span>
-          <h4>AI Chat Assistant</h4>
+          <h4>AI Chat &mdash; Migration Assistant</h4>
         </div>
         <div class="screenshot" onclick="openLightbox(this)">
           <img src="assets/screenshots/audit-log.png" alt="Audit Log" loading="lazy">
           <span class="zoom-hint">Click to enlarge</span>
-          <h4>Audit Log</h4>
+          <h4>Audit Log &mdash; Migration Trail</h4>
         </div>
       </div>
     </div>
