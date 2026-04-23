@@ -13,6 +13,7 @@ import jakarta.ws.rs.core.Response;
 import io.quarkus.runtime.StartupEvent;
 import org.infinispan.client.hotrod.RemoteCache;
 import org.infinispan.client.hotrod.RemoteCacheManager;
+import org.infinispan.commons.configuration.StringConfiguration;
 import org.jboss.logging.Logger;
 
 import java.util.Map;
@@ -56,13 +57,26 @@ public class ChatResource {
     @Inject
     GateForgeMetrics gateForgeMetrics;
 
+    private RemoteCache<String, String> getOrCreateFaqCache() {
+        RemoteCache<String, String> cache = cacheManager.getCache(FAQ_CACHE);
+        if (cache == null) {
+            LOG.info("Creating FAQ cache: " + FAQ_CACHE);
+            cache = cacheManager.administration()
+                    .getOrCreateCache(FAQ_CACHE, new StringConfiguration(
+                            "<distributed-cache name=\"" + FAQ_CACHE + "\">"
+                            + "<encoding media-type=\"application/x-protostream\"/>"
+                            + "</distributed-cache>"));
+        }
+        return cache;
+    }
+
     void onStartup(@Observes StartupEvent ev) {
         ExecutorService executor = Executors.newSingleThreadExecutor();
         executor.submit(() -> {
             try {
                 Thread.sleep(15000);
                 LOG.info("Starting FAQ cache warm-up...");
-                RemoteCache<String, String> cache = cacheManager.getCache(FAQ_CACHE);
+                RemoteCache<String, String> cache = getOrCreateFaqCache();
                 if (cache == null) {
                     LOG.warn("FAQ cache not available, skipping warm-up");
                     return;
@@ -101,7 +115,7 @@ public class ChatResource {
             String normalized = userMessage.content().trim().toLowerCase();
             RemoteCache<String, String> faqCache = null;
             try {
-                faqCache = cacheManager.getCache(FAQ_CACHE);
+                faqCache = getOrCreateFaqCache();
             } catch (Exception e) {
                 LOG.debug("FAQ cache not available");
             }
@@ -135,7 +149,7 @@ public class ChatResource {
         ExecutorService executor = Executors.newSingleThreadExecutor();
         executor.submit(() -> {
             try {
-                RemoteCache<String, String> cache = cacheManager.getCache(FAQ_CACHE);
+                RemoteCache<String, String> cache = getOrCreateFaqCache();
                 if (cache == null) return;
                 for (String prompt : FAQ_PROMPTS) {
                     try {
@@ -162,7 +176,7 @@ public class ChatResource {
     @Path("/faq-status")
     public Response faqStatus() {
         try {
-            RemoteCache<String, String> cache = cacheManager.getCache(FAQ_CACHE);
+            RemoteCache<String, String> cache = getOrCreateFaqCache();
             int cached = 0;
             if (cache != null) {
                 for (String prompt : FAQ_PROMPTS) {

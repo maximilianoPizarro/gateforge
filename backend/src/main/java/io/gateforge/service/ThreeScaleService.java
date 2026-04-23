@@ -13,6 +13,7 @@ import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.infinispan.client.hotrod.RemoteCache;
 import org.infinispan.client.hotrod.RemoteCacheManager;
+import org.infinispan.commons.configuration.StringConfiguration;
 
 import java.util.*;
 import java.util.concurrent.ExecutorService;
@@ -34,6 +35,18 @@ public class ThreeScaleService {
     private final ReentrantLock productsLock = new ReentrantLock();
     private final ReentrantLock backendsLock = new ReentrantLock();
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    private RemoteCache<String, String> getOrCreateCache(String name) {
+        RemoteCache<String, String> cache = cacheManager.getCache(name);
+        if (cache == null) {
+            cache = cacheManager.administration()
+                    .getOrCreateCache(name, new StringConfiguration(
+                            "<distributed-cache name=\"" + name + "\">"
+                            + "<encoding media-type=\"application/x-protostream\"/>"
+                            + "</distributed-cache>"));
+        }
+        return cache;
+    }
 
     @Inject
     RemoteCacheManager cacheManager;
@@ -82,7 +95,7 @@ public class ThreeScaleService {
 
     public List<ThreeScaleProduct> listProducts() {
         try {
-            RemoteCache<String, String> cache = cacheManager.getCache(PRODUCTS_CACHE);
+            RemoteCache<String, String> cache = getOrCreateCache(PRODUCTS_CACHE);
             if (cache != null) {
                 String cached = cache.get(CACHE_KEY);
                 if (cached != null) {
@@ -102,7 +115,7 @@ public class ThreeScaleService {
             LOG.info("Loaded %d products in %dms from source".formatted(result.size(), elapsed));
 
             try {
-                RemoteCache<String, String> cache = cacheManager.getCache(PRODUCTS_CACHE);
+                RemoteCache<String, String> cache = getOrCreateCache(PRODUCTS_CACHE);
                 if (cache != null) {
                     cache.put(CACHE_KEY, objectMapper.writeValueAsString(result), cacheTtlSeconds, TimeUnit.SECONDS);
                     LOG.info("Products cached in Data Grid (TTL %ds)".formatted(cacheTtlSeconds));
@@ -185,7 +198,7 @@ public class ThreeScaleService {
 
     public List<Map<String, Object>> listBackendsCombined() {
         try {
-            RemoteCache<String, String> cache = cacheManager.getCache(BACKENDS_CACHE);
+            RemoteCache<String, String> cache = getOrCreateCache(BACKENDS_CACHE);
             if (cache != null) {
                 String cached = cache.get(CACHE_KEY);
                 if (cached != null) {
@@ -205,7 +218,7 @@ public class ThreeScaleService {
             LOG.info("Loaded %d backends in %dms from source".formatted(result.size(), elapsed));
 
             try {
-                RemoteCache<String, String> cache = cacheManager.getCache(BACKENDS_CACHE);
+                RemoteCache<String, String> cache = getOrCreateCache(BACKENDS_CACHE);
                 if (cache != null) {
                     cache.put(CACHE_KEY, objectMapper.writeValueAsString(result), cacheTtlSeconds, TimeUnit.SECONDS);
                     LOG.info("Backends cached in Data Grid (TTL %ds)".formatted(cacheTtlSeconds));
