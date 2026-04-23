@@ -24,6 +24,7 @@ import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
           <a routerLink="/migrate" routerLinkActive="active">Migration</a>
           <a routerLink="/chat" routerLinkActive="active">AI Chat</a>
           <a routerLink="/audit" routerLinkActive="active">Audit Log</a>
+          <a routerLink="/settings" routerLinkActive="active">Settings</a>
         </nav>
       </div>
     </header>

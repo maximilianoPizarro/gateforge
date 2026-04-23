@@ -2,6 +2,7 @@ package io.gateforge.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.gateforge.ai.MigrationAgent;
 import io.gateforge.entity.AuditEntryEntity;
 import io.gateforge.entity.GeneratedResourceEntity;
 import io.gateforge.entity.MigrationPlanEntity;
@@ -40,6 +41,12 @@ public class MigrationService {
     @Inject
     ObjectMapper objectMapper;
 
+    @Inject
+    KuadrantCtlService kuadrantCtlService;
+
+    @Inject
+    MigrationAgent migrationAgent;
+
     @ConfigProperty(name = "gateforge.connectivity-link.gateway-class-name", defaultValue = "istio")
     String gatewayClassName;
 
@@ -58,7 +65,10 @@ public class MigrationService {
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5)).build();
 
-    @Transactional
+    private record ProductContext(
+            String oasContent, String backendSvcName, String namespace,
+            List<ThreeScaleProduct.MappingRule> effectiveRules, boolean hasRealOas) {}
+
     public MigrationPlan analyze(String gatewayStrategy, List<String> productNames, String targetClusterId) {
         List<ThreeScaleProduct> products = threeScaleService.listProducts().stream()
                 .filter(p -> productNames.isEmpty() || productNames.contains(p.name()))
@@ -67,6 +77,7 @@ public class MigrationService {
         BackendIndex backendEndpoints = resolveBackendEndpoints();
 
         List<MigrationPlan.GeneratedResource> resources = new ArrayList<>();
+        Map<String, String> oasCache = new LinkedHashMap<>();
         String gatewayName;
 
         if ("dual".equals(gatewayStrategy)) {
@@ -90,50 +101,261 @@ public class MigrationService {
                 gatewayName = gwName;
             }
 
-            List<ThreeScaleProduct.MappingRule> effectiveRules = product.mappingRules();
-            String backendSvcName = sysName;
-            String ns = null;
+            ProductContext ctx = resolveProductContext(product, backendEndpoints);
 
-            var discovered = discoverPathsFromBackends(product, backendEndpoints);
-            if (!discovered.rules.isEmpty()) {
-                effectiveRules = discovered.rules;
-            }
-            if (discovered.serviceName != null) {
-                backendSvcName = discovered.serviceName;
-            }
-            if (discovered.namespace != null && !discovered.namespace.isBlank()) {
-                ns = discovered.namespace;
+            String ns = ctx.namespace;
+            if (ns == null || ns.isBlank()) ns = product.backendNamespace();
+            if (ns == null || ns.isBlank()) ns = gatewayNamespace;
+
+            String hostname = sysName + "." + clusterDomain;
+            String effectiveOas = ctx.oasContent;
+
+            if (effectiveOas == null) {
+                effectiveOas = buildOpenApiFromMappingRules(product, ctx.effectiveRules, hostname);
             }
 
-            if (ns == null || ns.isBlank()) {
-                ns = product.backendNamespace();
-            }
-            if (ns == null || ns.isBlank()) {
-                ns = gatewayNamespace;
+            oasCache.put(sysName, effectiveOas);
+
+            boolean usedKuadrantctl = false;
+
+            // Try kuadrantctl first
+            if (effectiveOas != null) {
+                try {
+                    String httpRouteOut = kuadrantCtlService.generateHttpRoute(effectiveOas);
+                    if (httpRouteOut != null && !httpRouteOut.startsWith("ERROR") && httpRouteOut.contains("kind")) {
+                        String patchedHttp = patchKuadrantctlOutput(httpRouteOut, "HTTPRoute", routeName,
+                                ns, gatewayName, gatewayNamespace, sysName, hostname);
+                        resources.add(new MigrationPlan.GeneratedResource("HTTPRoute", routeName, ns, patchedHttp));
+                        usedKuadrantctl = true;
+                        LOG.infof("kuadrantctl generated HTTPRoute for %s:\n%s", sysName, patchedHttp);
+                    }
+                } catch (Exception e) {
+                    LOG.warnf("kuadrantctl HTTPRoute failed for %s: %s", sysName, e.getMessage());
+                }
             }
 
-            resources.add(buildHttpRoute(routeName, ns, gatewayName, product, effectiveRules, backendSvcName));
+            if (!usedKuadrantctl) {
+                resources.add(buildHttpRoute(routeName, ns, gatewayName, product, ctx.effectiveRules, ctx.backendSvcName));
+            }
+
             resources.add(buildAuthPolicy(sysName + "-auth", ns, routeName, product));
             resources.add(buildRateLimitPolicy(sysName + "-ratelimit", ns, routeName, product));
             resources.add(buildOpenShiftRoute(sysName, gatewayName));
         }
 
-        String catalogInfo = developerHubEnabled ? buildCatalogInfo(products, gatewayStrategy) : null;
+        String catalogInfo = developerHubEnabled ? buildCatalogInfo(products, gatewayStrategy, oasCache) : null;
 
         String planId = UUID.randomUUID().toString().substring(0, 8);
         String effectiveClusterId = targetClusterId != null ? targetClusterId : "local";
         io.gateforge.model.TargetCluster cluster = clusterRegistry.getCluster(effectiveClusterId);
         String clusterLabel = cluster != null ? cluster.label() : "Local (in-cluster)";
 
+        String aiAnalysis = runAiVerification(products, resources);
+
         MigrationPlan plan = new MigrationPlan(
                 planId, gatewayStrategy,
                 products.stream().map(ThreeScaleProduct::name).toList(),
-                resources, "AI analysis pending", Instant.now(),
+                resources, aiAnalysis, Instant.now(),
                 catalogInfo, "ACTIVE", effectiveClusterId, clusterLabel
         );
 
         persistPlan(plan);
         return plan;
+    }
+
+    private ProductContext resolveProductContext(ThreeScaleProduct product, BackendIndex backends) {
+        for (ThreeScaleProduct.BackendUsage usage : product.backendUsages()) {
+            String endpoint = null;
+            long backendId = extractBackendId(usage.backendName());
+            if (backendId > 0) endpoint = backends.byId.get(backendId);
+            if (endpoint == null) endpoint = backends.byName.get(usage.backendName());
+            if (endpoint == null || endpoint.isBlank()) continue;
+
+            String svcName = extractServiceName(endpoint);
+            String svcNs = extractServiceNamespace(endpoint);
+
+            String fullOas = fetchFullOpenApiSpec(endpoint);
+            if (fullOas != null) {
+                LOG.infof("Fetched real OpenAPI spec from %s for product %s", endpoint, product.systemName());
+                return new ProductContext(fullOas, svcName, svcNs, product.mappingRules(), true);
+            }
+
+            List<ThreeScaleProduct.MappingRule> rules = fetchOpenApiPaths(endpoint);
+            if (!rules.isEmpty()) {
+                return new ProductContext(null, svcName, svcNs, rules, false);
+            }
+
+            return new ProductContext(null, svcName, svcNs, product.mappingRules(), false);
+        }
+
+        return new ProductContext(null, product.systemName(), null, product.mappingRules(), false);
+    }
+
+    private String fetchFullOpenApiSpec(String baseUrl) {
+        for (String suffix : List.of("/q/openapi", "/openapi.json", "/openapi", "/swagger.json",
+                "/q/openapi?format=json", "/v3/api-docs")) {
+            try {
+                String url = baseUrl.endsWith("/")
+                        ? baseUrl.substring(0, baseUrl.length() - 1) + suffix
+                        : baseUrl + suffix;
+
+                HttpRequest req = HttpRequest.newBuilder()
+                        .uri(URI.create(url))
+                        .timeout(Duration.ofSeconds(5))
+                        .header("Accept", "application/json, application/yaml")
+                        .GET().build();
+
+                HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+                if (resp.statusCode() != 200) continue;
+
+                String body = resp.body().trim();
+                if (body.isEmpty()) continue;
+
+                JsonNode root;
+                if (body.startsWith("{")) {
+                    root = objectMapper.readTree(body);
+                } else {
+                    org.yaml.snakeyaml.Yaml yaml = new org.yaml.snakeyaml.Yaml();
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> map = yaml.load(body);
+                    root = objectMapper.valueToTree(map);
+                }
+
+                if (root.has("paths") && root.get("paths").isObject() && root.get("paths").size() > 0) {
+                    return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(root);
+                }
+            } catch (Exception e) {
+                LOG.debugf("OpenAPI fetch failed for %s%s: %s", baseUrl, suffix, e.getMessage());
+            }
+        }
+        return null;
+    }
+
+    private String buildOpenApiFromMappingRules(ThreeScaleProduct product,
+            List<ThreeScaleProduct.MappingRule> rules, String hostname) {
+        if (rules == null || rules.isEmpty()) {
+            return buildMinimalOpenApi(product, hostname);
+        }
+
+        Map<String, Map<String, Object>> paths = new LinkedHashMap<>();
+
+        for (ThreeScaleProduct.MappingRule rule : rules) {
+            String path = sanitizePath(rule.pattern());
+            if (path.contains("{")) path = path.replaceAll("/\\{[^}]+}", "/{id}");
+
+            paths.computeIfAbsent(path, k -> new LinkedHashMap<>());
+            Map<String, Object> method = new LinkedHashMap<>();
+            method.put("summary", rule.metricRef() != null && !rule.metricRef().isBlank()
+                    ? rule.metricRef() : rule.httpMethod() + " " + path);
+            Map<String, Object> okResp = new LinkedHashMap<>();
+            okResp.put("description", "Success");
+            Map<String, Object> responses = new LinkedHashMap<>();
+            responses.put("200", okResp);
+            method.put("responses", responses);
+            paths.get(path).put(rule.httpMethod().toLowerCase(), method);
+        }
+
+        Map<String, Object> spec = new LinkedHashMap<>();
+        spec.put("openapi", "3.0.3");
+        Map<String, Object> info = new LinkedHashMap<>();
+        info.put("title", product.name());
+        info.put("description", product.description() != null ? product.description() : "Migrated from 3scale by GateForge");
+        info.put("version", "1.0.0");
+        spec.put("info", info);
+        spec.put("servers", List.of(Map.of("url", "https://" + hostname)));
+        spec.put("paths", paths);
+
+        try {
+            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(spec);
+        } catch (Exception e) {
+            LOG.warnf("Failed to serialize synthetic OAS for %s", product.systemName());
+            return null;
+        }
+    }
+
+    private String buildMinimalOpenApi(ThreeScaleProduct product, String hostname) {
+        Map<String, Object> spec = new LinkedHashMap<>();
+        spec.put("openapi", "3.0.3");
+        spec.put("info", Map.of("title", product.name(), "version", "1.0.0"));
+        spec.put("servers", List.of(Map.of("url", "https://" + hostname)));
+        spec.put("paths", Map.of("/", Map.of("get", Map.of(
+                "summary", "Root endpoint",
+                "responses", Map.of("200", Map.of("description", "OK"))))));
+        try {
+            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(spec);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private String patchKuadrantctlOutput(String yaml, String kind, String name,
+            String namespace, String gatewayName, String gwNamespace,
+            String productSysName, String hostname) {
+        yaml = yaml.replaceFirst("(?m)^  name: .*$", "  name: " + name);
+        yaml = yaml.replaceFirst("(?m)^  namespace: .*$", "  namespace: " + namespace);
+        if (!yaml.contains("namespace:")) {
+            yaml = yaml.replaceFirst("(?m)(  name: " + name + ")", "$1\n  namespace: " + namespace);
+        }
+
+        if (!yaml.contains("app.kubernetes.io/managed-by")) {
+            String labelsBlock = "metadata:\n"
+                    + "  labels:\n"
+                    + "    app.kubernetes.io/managed-by: gateforge\n"
+                    + "    \"gateforge.io/product\": \"" + productSysName + "\"";
+            yaml = yaml.replaceFirst("(?m)^metadata:", labelsBlock);
+        }
+        yaml = yaml.replaceAll("(?m)^  creationTimestamp: null\n", "");
+
+        if ("HTTPRoute".equals(kind)) {
+            if (gatewayName != null && !yaml.contains("parentRefs")) {
+                String specBlock = "spec:\n"
+                        + "  hostnames:\n"
+                        + "    - " + hostname + "\n"
+                        + "  parentRefs:\n"
+                        + "    - name: " + gatewayName + "\n"
+                        + "      namespace: " + gwNamespace;
+                yaml = yaml.replaceFirst("(?m)^spec:", specBlock);
+            }
+        }
+
+        return yaml;
+    }
+
+    private String runAiVerification(List<ThreeScaleProduct> products, List<MigrationPlan.GeneratedResource> resources) {
+        try {
+            StringBuilder prompt = new StringBuilder();
+            prompt.append("Review this GateForge migration plan. Verify correctness and provide a brief analysis.\n\n");
+            prompt.append("Products being migrated: ");
+            prompt.append(products.stream().map(ThreeScaleProduct::name).collect(Collectors.joining(", ")));
+            prompt.append("\n\nGenerated resources summary:\n");
+
+            for (MigrationPlan.GeneratedResource r : resources) {
+                prompt.append("- ").append(r.kind()).append(": ").append(r.name())
+                        .append(" (ns: ").append(r.namespace()).append(")\n");
+            }
+
+            long httpRouteCount = resources.stream().filter(r -> "HTTPRoute".equals(r.kind())).count();
+            long authCount = resources.stream().filter(r -> "AuthPolicy".equals(r.kind())).count();
+            long rlCount = resources.stream().filter(r -> "RateLimitPolicy".equals(r.kind())).count();
+
+            prompt.append("\nSample HTTPRoute YAML:\n```yaml\n");
+            resources.stream().filter(r -> "HTTPRoute".equals(r.kind())).findFirst()
+                    .ifPresent(r -> prompt.append(r.yaml()));
+            prompt.append("\n```\n");
+
+            prompt.append("\nProvide: 1) Correctness assessment, 2) Potential issues, 3) Recommendations. Keep it concise (max 200 words).");
+
+            String analysis = migrationAgent.chat(prompt.toString());
+            if (analysis != null) {
+                analysis = analysis.replaceAll("(?s)<think>.*?</think>\\s*", "").trim();
+                int closeIdx = analysis.indexOf("</think>");
+                if (closeIdx >= 0) analysis = analysis.substring(closeIdx + "</think>".length()).trim();
+            }
+            return analysis != null ? analysis : "AI verification unavailable";
+        } catch (Exception e) {
+            LOG.warnf("AI verification failed: %s", e.getMessage());
+            return "AI verification skipped: " + e.getMessage();
+        }
     }
 
     public List<AuditEntry> getAuditLog() {
@@ -239,44 +461,76 @@ public class MigrationService {
         if (plan == null) return List.of();
 
         List<Map<String, String>> commands = new ArrayList<>();
-        String gatewayHost = null;
+        Set<String> httpRoutePaths = new LinkedHashSet<>();
+        String authType = "api-key";
 
         for (MigrationPlan.GeneratedResource res : plan.resources()) {
-            if ("Route".equals(res.kind()) && res.yaml().contains("host:")) {
-                String yaml = res.yaml();
-                int idx = yaml.indexOf("host:");
-                if (idx >= 0) {
-                    String rest = yaml.substring(idx + 5).trim();
-                    String host = rest.split("\\s")[0].trim();
-                    gatewayHost = host;
-
-                    commands.add(Map.of(
-                            "label", "Test " + res.name() + " (no auth — expect 401/403)",
-                            "command", "curl -sk https://" + host + "/",
-                            "type", "no-auth"
-                    ));
-                    commands.add(Map.of(
-                            "label", "Test " + res.name() + " with API Key",
-                            "command", "curl -sk -H \"X-API-Key: YOUR_API_KEY\" https://" + host + "/api/v1/",
-                            "type", "api-key"
-                    ));
-                    commands.add(Map.of(
-                            "label", "Swagger UI",
-                            "command", "https://" + host + "/q/swagger-ui",
-                            "type", "url"
-                    ));
-                    commands.add(Map.of(
-                            "label", "OpenAPI Spec",
-                            "command", "https://" + host + "/q/openapi",
-                            "type", "url"
-                    ));
+            if ("HTTPRoute".equals(res.kind())) {
+                extractPathsFromYaml(res.yaml(), httpRoutePaths);
+            }
+            if ("AuthPolicy".equals(res.kind())) {
+                if (res.yaml().contains("jwt:") || res.yaml().contains("oidc")) {
+                    authType = "oidc";
                 }
+            }
+        }
+
+        for (MigrationPlan.GeneratedResource res : plan.resources()) {
+            if (!"Route".equals(res.kind()) || !res.yaml().contains("host:")) continue;
+
+            String yaml = res.yaml();
+            int idx = yaml.indexOf("host:");
+            if (idx < 0) continue;
+            String rest = yaml.substring(idx + 5).trim();
+            String host = rest.split("\\s")[0].trim();
+
+            commands.add(Map.of(
+                    "label", "Test " + res.name() + " (no auth — expect 401/403)",
+                    "command", "curl -sk https://" + host + "/",
+                    "type", "no-auth"
+            ));
+
+            if ("oidc".equals(authType)) {
+                commands.add(Map.of(
+                        "label", "Test " + res.name() + " with Bearer Token",
+                        "command", "curl -sk -H \"Authorization: Bearer $TOKEN\" https://" + host + "/",
+                        "type", "bearer"
+                ));
+            } else {
+                commands.add(Map.of(
+                        "label", "Test " + res.name() + " with API Key (header)",
+                        "command", "curl -sk -H \"api_key: YOUR_API_KEY\" https://" + host + "/",
+                        "type", "api-key"
+                ));
+            }
+
+            for (String path : httpRoutePaths) {
+                if ("/".equals(path)) continue;
+                String curlAuth = "oidc".equals(authType)
+                        ? "-H \"Authorization: Bearer $TOKEN\""
+                        : "-H \"api_key: YOUR_API_KEY\"";
+                commands.add(Map.of(
+                        "label", "Test path " + path,
+                        "command", "curl -sk " + curlAuth + " https://" + host + path,
+                        "type", "path-test"
+                ));
             }
         }
         return commands;
     }
 
-    private String buildCatalogInfo(List<ThreeScaleProduct> products, String strategy) {
+    private void extractPathsFromYaml(String yaml, Set<String> paths) {
+        for (String line : yaml.split("\n")) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith("value:")) {
+                String val = trimmed.substring(6).trim().replaceAll("^[\"']|[\"']$", "");
+                if (val.startsWith("/")) paths.add(val);
+            }
+        }
+    }
+
+    private String buildCatalogInfo(List<ThreeScaleProduct> products, String strategy,
+            Map<String, String> oasCache) {
         StringBuilder sb = new StringBuilder();
         String gatewayName = "dedicated".equals(strategy) ? null :
                 "dual".equals(strategy) ? "gateforge-external" : "gateforge-shared";
@@ -287,52 +541,43 @@ public class MigrationService {
             String ns = p.backendNamespace() != null && !p.backendNamespace().isBlank()
                     ? p.backendNamespace() : gatewayNamespace;
             String routeName = sysName + "-route";
-            String gw = "dedicated".equals(strategy) ? sysName + "-gw" : gatewayName;
 
             if (i > 0) sb.append("\n---\n");
 
+            String desc = p.description() != null ? p.description().replace("\"", "'") : sysName;
+            String hostname = sysName + "." + clusterDomain;
+
             sb.append("""
                     apiVersion: backstage.io/v1alpha1
-                    kind: API
+                    kind: Component
                     metadata:
-                      name: %s
+                      name: %s-connectivity-link
                       namespace: default
                       description: "%s — migrated from 3scale to Connectivity Link by GateForge"
                       annotations:
                         kuadrant.io/namespace: %s
                         kuadrant.io/httproute: %s
                         backstage.io/kubernetes-namespace: %s
+                        backstage.io/kubernetes-id: %s
                       tags:
                         - connectivity-link
                         - kuadrant
                         - gateforge-migrated
-                        - gateway-api
+                      links:
+                        - title: API Gateway Endpoint
+                          url: https://%s
+                        - title: GateForge Dashboard
+                          url: %s
                     spec:
-                      type: openapi
+                      type: service
                       lifecycle: production
-                      owner: platform-engineering
-                      definition: |
-                        openapi: "3.0.3"
-                        info:
-                          title: %s
-                          description: "API migrated from 3scale by GateForge"
-                          version: "1.0.0"
-                        servers:
-                          - url: https://%s
-                            description: "Connectivity Link Gateway"
-                        paths:
-                          /:
-                            get:
-                              summary: Root endpoint
-                              responses:
-                                '200':
-                                  description: OK
-                    """.formatted(
-                    sysName, p.description() != null ? p.description().replace("\"", "'") : sysName,
-                    ns, routeName, ns,
-                    p.name(),
-                    gw != null ? gw + "." + clusterDomain : sysName + "." + clusterDomain
-            ));
+                      owner: group:default/3scale
+                      system: gateforge-migrated-apis
+                      providesApis:
+                        - %s
+                    """.formatted(sysName, desc, ns, routeName, ns, sysName,
+                    hostname, developerHubUrl.equals("none") ? "https://gateforge." + clusterDomain : developerHubUrl,
+                    sysName));
         }
         return sb.toString();
     }
@@ -411,9 +656,7 @@ public class MigrationService {
             for (ThreeScaleProduct.MappingRule r : effectiveRules) {
                 String p = sanitizePath(r.pattern());
                 if (p.contains("{")) p = p.replaceAll("/\\{[^}]+}.*", "");
-                String[] segments = p.split("/");
-                String prefix = segments.length >= 2 ? "/" + segments[1] : "/";
-                prefixes.add(prefix);
+                prefixes.add(p.equals("/") ? "/" : p);
             }
 
             if (prefixes.size() > 16) {
@@ -548,34 +791,6 @@ public class MigrationService {
     }
 
     private record BackendIndex(Map<Long, String> byId, Map<String, String> byName) {}
-    private record DiscoveredPaths(List<ThreeScaleProduct.MappingRule> rules, String serviceName, String namespace) {}
-
-    private DiscoveredPaths discoverPathsFromBackends(
-            ThreeScaleProduct product, BackendIndex backends) {
-
-        for (ThreeScaleProduct.BackendUsage usage : product.backendUsages()) {
-            String endpoint = null;
-
-            long backendId = extractBackendId(usage.backendName());
-            if (backendId > 0) {
-                endpoint = backends.byId.get(backendId);
-            }
-            if (endpoint == null) {
-                endpoint = backends.byName.get(usage.backendName());
-            }
-            if (endpoint == null || endpoint.isBlank()) continue;
-
-            String svcName = extractServiceName(endpoint);
-            String svcNs = extractServiceNamespace(endpoint);
-            List<ThreeScaleProduct.MappingRule> rules = fetchOpenApiPaths(endpoint);
-            if (!rules.isEmpty()) {
-                LOG.infof("Discovered %d paths from backend %s (ns=%s) for product %s",
-                        rules.size(), endpoint, svcNs, product.systemName());
-                return new DiscoveredPaths(rules, svcName, svcNs);
-            }
-        }
-        return new DiscoveredPaths(List.of(), null, null);
-    }
 
     private BackendIndex resolveBackendEndpoints() {
         Map<Long, String> byId = new HashMap<>();
@@ -597,8 +812,8 @@ public class MigrationService {
                     String sysName = String.valueOf(b.getOrDefault("system_name", ""));
                     if (!sysName.isBlank()) byName.put(sysName, ep);
 
-                    String name = String.valueOf(b.getOrDefault("name", ""));
-                    if (!name.isBlank()) byName.put(name, ep);
+                    String bName = String.valueOf(b.getOrDefault("name", ""));
+                    if (!bName.isBlank()) byName.put(bName, ep);
                 }
             } catch (Exception e) {
                 LOG.warnf("Failed to resolve backend endpoints for source %s", client.getSourceId());

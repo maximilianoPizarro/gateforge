@@ -47,6 +47,12 @@ public class ThreeScaleAdminApiClient {
                 && !"none".equals(accessToken);
     }
 
+    public void ping() throws Exception {
+        String url = buildUrl("/admin/api/services.json", 1, 1);
+        JsonNode root = doGet(url);
+        if (root == null) throw new RuntimeException("3scale Admin API unreachable");
+    }
+
     public List<Map<String, Object>> listServices() {
         return fetchPaginatedList("/admin/api/services.json", "services", "service");
     }

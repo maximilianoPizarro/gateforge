@@ -111,9 +111,8 @@ public class ThreeScaleSourceRegistry {
 
         if (client.isConfigured()) {
             try {
-                List<Map<String, Object>> services = client.listServices();
+                client.ping();
                 status.put("reachable", true);
-                status.put("productCount", services.size());
             } catch (Exception e) {
                 status.put("reachable", false);
                 status.put("error", e.getMessage());

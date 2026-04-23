@@ -5,12 +5,11 @@ import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.dsl.base.CustomResourceDefinitionContext;
 import io.gateforge.model.ProjectInfo;
+import io.gateforge.model.ThreeScaleProduct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @ApplicationScoped
@@ -18,6 +17,9 @@ public class ClusterService {
 
     @Inject
     KubernetesClient kubernetesClient;
+
+    @Inject
+    ThreeScaleService threeScaleService;
 
     private static final String[][] THREESCALE_CRDS = {
         {"capabilities.3scale.net", "v1beta1", "products"},
@@ -33,11 +35,37 @@ public class ClusterService {
 
     public List<ProjectInfo> listProjects() {
         Set<String> threeScaleNs = collectNamespaces(THREESCALE_CRDS);
+        enrichWithProductBackends(threeScaleNs);
         Set<String> kuadrantNs = collectNamespaces(KUADRANT_CRDS);
 
-        return kubernetesClient.namespaces().list().getItems().stream()
+        List<ProjectInfo> projects = kubernetesClient.namespaces().list().getItems().stream()
                 .map(ns -> toProjectInfo(ns, threeScaleNs, kuadrantNs))
                 .collect(Collectors.toList());
+
+        projects.sort((a, b) -> {
+            int scoreA = (a.hasThreeScale() ? 2 : 0) + (a.hasKuadrant() ? 1 : 0);
+            int scoreB = (b.hasThreeScale() ? 2 : 0) + (b.hasKuadrant() ? 1 : 0);
+            if (scoreA != scoreB) return scoreB - scoreA;
+            return a.name().compareToIgnoreCase(b.name());
+        });
+
+        return projects;
+    }
+
+    private void enrichWithProductBackends(Set<String> threeScaleNs) {
+        try {
+            List<ThreeScaleProduct> products = threeScaleService.listProducts();
+            for (ThreeScaleProduct p : products) {
+                if (p.backendNamespace() != null && !p.backendNamespace().isBlank()) {
+                    threeScaleNs.add(p.backendNamespace());
+                }
+                if (p.namespace() != null && !p.namespace().isBlank()
+                        && !"admin-api".equals(p.namespace())) {
+                    threeScaleNs.add(p.namespace());
+                }
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     public ProjectInfo getProject(String name) {

@@ -29,6 +29,7 @@ public class MigrationResource {
     ClusterRegistry clusterRegistry;
 
     public record AnalyzeRequest(String gatewayStrategy, List<String> products, String targetClusterId) {}
+    public record ApplyRequest(List<Integer> excludedIndexes, Map<String, String> yamlOverrides) {}
     public record ApplyResult(String planId, int applied, int failed, List<ResourceResult> results, String targetClusterId) {}
     public record ResourceResult(String kind, String name, String namespace, boolean success, String message) {}
     public record BulkRevertRequest(List<String> planIds, boolean deleteGateway) {}
@@ -47,11 +48,16 @@ public class MigrationResource {
 
     @POST
     @Path("/plans/{id}/apply")
-    public ApplyResult applyPlan(@PathParam("id") String id) {
+    public ApplyResult applyPlan(@PathParam("id") String id, ApplyRequest request) {
         MigrationPlan plan = migrationService.getPlan(id);
         if (plan == null) {
             throw new NotFoundException("Plan not found: " + id);
         }
+
+        Set<Integer> excluded = request != null && request.excludedIndexes() != null
+                ? new HashSet<>(request.excludedIndexes()) : Set.of();
+        Map<String, String> overrides = request != null && request.yamlOverrides() != null
+                ? request.yamlOverrides() : Map.of();
 
         String clusterId = plan.targetClusterId() != null ? plan.targetClusterId() : "local";
         KubernetesClient client = clusterRegistry.getClient(clusterId);
@@ -59,17 +65,27 @@ public class MigrationResource {
         List<ResourceResult> results = new ArrayList<>();
         int applied = 0;
         int failed = 0;
+        int skipped = 0;
 
-        for (MigrationPlan.GeneratedResource res : plan.resources()) {
+        List<MigrationPlan.GeneratedResource> resources = plan.resources();
+        for (int idx = 0; idx < resources.size(); idx++) {
+            MigrationPlan.GeneratedResource res = resources.get(idx);
+            if (excluded.contains(idx)) {
+                results.add(new ResourceResult(res.kind(), res.name(), res.namespace(), true, "Skipped"));
+                skipped++;
+                LOG.infof("Skipped %s/%s (excluded by user)", res.kind(), res.name());
+                continue;
+            }
+            String effectiveYaml = overrides.getOrDefault(String.valueOf(idx), res.yaml());
             try {
-                applyYaml(client, res.yaml(), res.namespace());
+                applyYaml(client, effectiveYaml, res.namespace());
                 results.add(new ResourceResult(res.kind(), res.name(), res.namespace(), true, "Applied"));
                 applied++;
 
                 migrationService.addAuditEntry(new AuditEntry(
                         UUID.randomUUID().toString(),
                         Instant.now(), "APPLY", res.kind(), res.name(), res.namespace(),
-                        null, res.yaml(), "GateForge Migration Wizard", clusterId
+                        null, effectiveYaml, "GateForge Migration Wizard", clusterId
                 ));
                 LOG.infof("Applied %s/%s to namespace %s on cluster %s", res.kind(), res.name(), res.namespace(), clusterId);
             } catch (Exception e) {
@@ -87,7 +103,12 @@ public class MigrationResource {
         if (namespace != null && !namespace.isBlank()) {
             generic.getMetadata().setNamespace(namespace);
         }
-        client.resource(generic).serverSideApply();
+        String apiVersion = generic.getApiVersion();
+        if (apiVersion != null && apiVersion.contains("route.openshift.io")) {
+            client.resource(generic).createOr(r -> r.update());
+        } else {
+            client.resource(generic).serverSideApply();
+        }
     }
 
     @POST

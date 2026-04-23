@@ -1,0 +1,389 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "GateForge Helm Values",
+  "description": "Configuration values for the GateForge Helm chart — AI-powered 3scale to Connectivity Link migration platform",
+  "type": "object",
+  "properties": {
+    "global": {
+      "type": "object",
+      "description": "Global settings shared across sub-charts",
+      "properties": {
+        "clusterDomain": {
+          "type": "string",
+          "description": "OpenShift cluster apps domain (e.g. apps.cluster.example.com)"
+        }
+      }
+    },
+    "backend": {
+      "type": "object",
+      "description": "GateForge backend (Quarkus)",
+      "properties": {
+        "image": {
+          "type": "object",
+          "properties": {
+            "repository": {
+              "type": "string",
+              "description": "Container image repository"
+            },
+            "tag": {
+              "type": "string",
+              "description": "Container image tag"
+            },
+            "pullPolicy": {
+              "type": "string",
+              "enum": ["Always", "IfNotPresent", "Never"],
+              "description": "Image pull policy"
+            }
+          },
+          "required": ["repository", "tag"]
+        },
+        "replicas": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of backend replicas"
+        },
+        "resources": {
+          "type": "object",
+          "description": "CPU/memory resource requests and limits",
+          "properties": {
+            "requests": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            },
+            "limits": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            }
+          }
+        }
+      },
+      "required": ["image"]
+    },
+    "frontend": {
+      "type": "object",
+      "description": "GateForge frontend (Angular + Nginx)",
+      "properties": {
+        "image": {
+          "type": "object",
+          "properties": {
+            "repository": {
+              "type": "string",
+              "description": "Container image repository"
+            },
+            "tag": {
+              "type": "string",
+              "description": "Container image tag"
+            },
+            "pullPolicy": {
+              "type": "string",
+              "enum": ["Always", "IfNotPresent", "Never"],
+              "description": "Image pull policy"
+            }
+          },
+          "required": ["repository", "tag"]
+        },
+        "replicas": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of frontend replicas"
+        },
+        "resources": {
+          "type": "object",
+          "description": "CPU/memory resource requests and limits",
+          "properties": {
+            "requests": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            },
+            "limits": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            }
+          }
+        }
+      },
+      "required": ["image"]
+    },
+    "ai": {
+      "type": "object",
+      "description": "LLM / AI configuration for migration analysis and chat",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable AI-powered features (migration verification, chat)"
+        },
+        "endpoint": {
+          "type": "string",
+          "format": "uri",
+          "description": "OpenAI-compatible API endpoint URL"
+        },
+        "model": {
+          "type": "string",
+          "description": "LLM model identifier"
+        },
+        "existingSecret": {
+          "type": "string",
+          "description": "Name of an existing Secret containing AI_API_KEY. If empty, uses <release>-ai-secret"
+        },
+        "temperature": {
+          "type": "string",
+          "description": "LLM temperature (0.0 - 1.0)"
+        },
+        "maxTokens": {
+          "type": "string",
+          "description": "Maximum tokens for LLM responses"
+        }
+      }
+    },
+    "threescale": {
+      "type": "object",
+      "description": "3scale API Management connection settings",
+      "properties": {
+        "adminApi": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable 3scale Admin API integration"
+            },
+            "url": {
+              "type": "string",
+              "description": "3scale Admin API base URL"
+            },
+            "accessToken": {
+              "type": "string",
+              "description": "3scale Admin API access token (use Secret in production)"
+            }
+          }
+        },
+        "crdDiscovery": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Discover 3scale Products/Backends via CRDs on-cluster"
+            },
+            "namespace": {
+              "type": "string",
+              "description": "Namespace to scan for 3scale CRDs (empty = all namespaces)"
+            }
+          }
+        },
+        "sources": {
+          "type": "string",
+          "description": "JSON array of multiple 3scale sources: [{\"id\":\"prod\",\"label\":\"Production\",\"url\":\"...\",\"token\":\"...\"}]"
+        }
+      }
+    },
+    "clusterDomain": {
+      "type": "string",
+      "description": "OpenShift cluster apps domain for generated routes and hostnames"
+    },
+    "developerHub": {
+      "type": "object",
+      "description": "Red Hat Developer Hub integration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable catalog-info.yaml generation for Developer Hub"
+        },
+        "url": {
+          "type": "string",
+          "description": "Developer Hub base URL"
+        }
+      }
+    },
+    "connectivityLink": {
+      "type": "object",
+      "description": "Red Hat Connectivity Link / Kuadrant target configuration",
+      "properties": {
+        "targetNamespace": {
+          "type": "string",
+          "description": "Namespace where Gateway and HTTPRoute resources are created"
+        },
+        "gatewayStrategy": {
+          "type": "string",
+          "enum": ["shared", "dedicated", "dual"],
+          "description": "Gateway strategy: shared (one gateway), dedicated (per-product), dual (internal+external)"
+        },
+        "gatewayClassName": {
+          "type": "string",
+          "description": "GatewayClass name (e.g. istio, envoy)"
+        }
+      }
+    },
+    "kuadrantctl": {
+      "type": "object",
+      "description": "kuadrantctl CLI integration for YAML generation",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Use kuadrantctl to generate HTTPRoute, AuthPolicy, RateLimitPolicy from OpenAPI specs"
+        }
+      }
+    },
+    "targetClusters": {
+      "type": "string",
+      "description": "JSON array of target clusters for multi-cluster deployment"
+    },
+    "argocd": {
+      "type": "object",
+      "description": "ArgoCD integration settings",
+      "properties": {
+        "clusterDiscovery": {
+          "type": "boolean",
+          "description": "Auto-discover target clusters from ArgoCD cluster secrets"
+        }
+      }
+    },
+    "postgresql": {
+      "type": "object",
+      "description": "PostgreSQL database for persistent storage (plans, audit log)",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Deploy a PostgreSQL instance"
+        },
+        "url": {
+          "type": "string",
+          "description": "JDBC URL (if using external database, set enabled=false)"
+        },
+        "username": {
+          "type": "string",
+          "description": "Database username"
+        },
+        "password": {
+          "type": "string",
+          "description": "Database password"
+        }
+      }
+    },
+    "rbac": {
+      "type": "object",
+      "description": "RBAC configuration",
+      "properties": {
+        "clusterAdmin": {
+          "type": "boolean",
+          "description": "Grant cluster-admin to the backend ServiceAccount (not recommended for production)"
+        }
+      }
+    },
+    "datagrid": {
+      "type": "object",
+      "description": "Red Hat Data Grid (Infinispan) for distributed caching",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Deploy a Data Grid instance for FAQ and product caching"
+        },
+        "image": {
+          "type": "object",
+          "properties": {
+            "repository": {
+              "type": "string",
+              "description": "Data Grid container image"
+            },
+            "tag": {
+              "type": "string",
+              "description": "Image tag"
+            },
+            "pullPolicy": {
+              "type": "string",
+              "enum": ["Always", "IfNotPresent", "Never"]
+            }
+          }
+        },
+        "replicas": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of Data Grid replicas"
+        },
+        "credentials": {
+          "type": "object",
+          "properties": {
+            "username": { "type": "string" },
+            "password": { "type": "string" }
+          }
+        },
+        "resources": {
+          "type": "object",
+          "properties": {
+            "requests": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            },
+            "limits": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            }
+          }
+        },
+        "jgroups": {
+          "type": "object",
+          "properties": {
+            "port": {
+              "type": "integer",
+              "description": "JGroups cluster communication port"
+            }
+          }
+        },
+        "persistence": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable PersistentVolumeClaim for Data Grid"
+            },
+            "size": {
+              "type": "string",
+              "description": "PVC size (e.g. 1Gi)"
+            }
+          }
+        }
+      }
+    },
+    "route": {
+      "type": "object",
+      "description": "OpenShift Route configuration",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Create an OpenShift Route for the frontend"
+        },
+        "host": {
+          "type": "string",
+          "description": "Custom hostname (empty = auto-generated)"
+        },
+        "tls": {
+          "type": "object",
+          "properties": {
+            "termination": {
+              "type": "string",
+              "enum": ["edge", "passthrough", "reencrypt"],
+              "description": "TLS termination type"
+            }
+          }
+        }
+      }
+    }
+  },
+  "required": ["backend", "frontend"]
+}

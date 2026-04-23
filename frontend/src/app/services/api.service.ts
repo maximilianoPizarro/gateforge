@@ -116,6 +116,7 @@ export interface AuditEntry {
 export interface ChatMessage {
   role: string;
   content: string;
+  cached?: boolean;
 }
 
 export interface ApplyResult {
@@ -182,8 +183,11 @@ export class ApiService {
     return this.http.get<AuditEntry[]>(`${this.baseUrl}/audit/reports`);
   }
 
-  applyPlan(planId: string): Observable<ApplyResult> {
-    return this.http.post<ApplyResult>(`${this.baseUrl}/migration/plans/${planId}/apply`, {});
+  applyPlan(planId: string, excludedIndexes?: number[], yamlOverrides?: Record<string, string>): Observable<ApplyResult> {
+    const body: Record<string, unknown> = {};
+    if (excludedIndexes && excludedIndexes.length > 0) body['excludedIndexes'] = excludedIndexes;
+    if (yamlOverrides && Object.keys(yamlOverrides).length > 0) body['yamlOverrides'] = yamlOverrides;
+    return this.http.post<ApplyResult>(`${this.baseUrl}/migration/plans/${planId}/apply`, body);
   }
 
   revertPlan(planId: string): Observable<ApplyResult> {
@@ -218,6 +222,10 @@ export class ApiService {
 
   removeSource(id: string): Observable<void> {
     return this.http.delete<void>(`${this.baseUrl}/threescale/sources/${id}`);
+  }
+
+  getSourceStatus(id: string): Observable<Record<string, unknown>> {
+    return this.http.get<Record<string, unknown>>(`${this.baseUrl}/threescale/sources/${id}/status`);
   }
 
   getTargetClusters(): Observable<TargetCluster[]> {

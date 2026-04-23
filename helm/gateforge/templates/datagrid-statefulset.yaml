@@ -18,6 +18,7 @@ spec:
     metadata:
       labels:
         {{- include "gateforge.datagridSelectorLabels" . | nindent 8 }}
+        app.openshift.io/runtime: infinispan
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/datagrid-configmap.yaml") . | sha256sum }}
     spec:

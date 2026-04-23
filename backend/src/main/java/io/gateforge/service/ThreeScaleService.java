@@ -6,14 +6,17 @@ import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.dsl.base.CustomResourceDefinitionContext;
 import io.gateforge.model.ThreeScaleProduct;
-import jakarta.annotation.PostConstruct;
+import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.infinispan.client.hotrod.RemoteCache;
 import org.infinispan.client.hotrod.RemoteCacheManager;
 
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
@@ -44,8 +47,24 @@ public class ThreeScaleService {
     @ConfigProperty(name = "gateforge.threescale.crd-discovery", defaultValue = "true")
     boolean crdDiscoveryEnabled;
 
-    @ConfigProperty(name = "gateforge.cache.ttl-seconds", defaultValue = "300")
+    @ConfigProperty(name = "gateforge.cache.ttl-seconds", defaultValue = "3600")
     long cacheTtlSeconds;
+
+    void onStartup(@Observes StartupEvent ev) {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        executor.submit(() -> {
+            try {
+                LOG.info("Warming up 3scale product cache in background...");
+                List<ThreeScaleProduct> products = listProducts();
+                LOG.info("Cache warm-up complete: %d products loaded".formatted(products.size()));
+                List<Map<String, Object>> backends = listBackendsCombined();
+                LOG.info("Cache warm-up complete: %d backends loaded".formatted(backends.size()));
+            } catch (Exception e) {
+                LOG.log(Level.WARNING, "Cache warm-up failed, first request will populate cache", e);
+            }
+        });
+        executor.shutdown();
+    }
 
     private static final CustomResourceDefinitionContext PRODUCT_CTX = new CustomResourceDefinitionContext.Builder()
             .withGroup("capabilities.3scale.net")
@@ -268,20 +287,16 @@ public class ThreeScaleService {
         status.put("configured", sourceRegistry.hasConfiguredClients());
 
         if (sourceRegistry.hasConfiguredClients()) {
-            ThreeScaleAdminApiClient client = sourceRegistry.getDefaultClient();
-            if (client != null && client.isConfigured()) {
-                try {
-                    List<Map<String, Object>> services = client.listServices();
-                    List<Map<String, Object>> backendApis = client.listBackendApis();
-                    List<Map<String, Object>> activeDocs = client.listActiveDocs();
-                    status.put("reachable", true);
-                    status.put("productCount", services.size());
-                    status.put("backendApiCount", backendApis.size());
-                    status.put("activeDocsCount", activeDocs.size());
-                } catch (Exception e) {
-                    status.put("reachable", false);
-                    status.put("error", e.getMessage());
-                }
+            try {
+                List<ThreeScaleProduct> cachedProducts = listProducts();
+                List<Map<String, Object>> cachedBackends = listBackendsCombined();
+                status.put("reachable", true);
+                status.put("productCount", cachedProducts.size());
+                status.put("backendApiCount", cachedBackends.size());
+                status.put("activeDocsCount", 0);
+            } catch (Exception e) {
+                status.put("reachable", false);
+                status.put("error", e.getMessage());
             }
         }
 

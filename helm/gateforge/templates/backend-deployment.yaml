@@ -4,7 +4,13 @@ metadata:
   name: {{ include "gateforge.fullname" . }}-backend
   labels:
     app: gateforge-backend
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/name: gateforge-backend
+    app.openshift.io/runtime: quarkus
     {{- include "gateforge.labels" . | nindent 4 }}
+  annotations:
+    app.openshift.io/runtime: quarkus
+    app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"Deployment","name":"{{ include "gateforge.fullname" . }}-postgresql"}{{- if .Values.datagrid.enabled }},{"apiVersion":"apps/v1","kind":"StatefulSet","name":"{{ include "gateforge.datagrid" . }}"}{{- end }}]'
 spec:
   replicas: {{ .Values.backend.replicas }}
   selector:
@@ -14,6 +20,7 @@ spec:
     metadata:
       labels:
         app: gateforge-backend
+        app.openshift.io/runtime: quarkus
     spec:
       serviceAccountName: {{ include "gateforge.fullname" . }}-backend
       containers:

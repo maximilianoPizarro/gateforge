@@ -21,6 +21,7 @@ const SYSTEM_PREFIXES = ['openshift-', 'kube-', 'default', 'openshift'];
             <div class="hero-actions">
               <a routerLink="/chat" class="btn btn-primary">Start AI Chat</a>
               <a routerLink="/migrate" class="btn btn-outline">Run Migration</a>
+              <a routerLink="/settings" class="btn btn-outline">Settings</a>
             </div>
           </div>
           <div class="hero-stats" *ngIf="!loading">
@@ -440,9 +441,16 @@ export class DashboardComponent implements OnInit {
   private applyFilter() {
     const base = this.showSystem ? this.allProjects : this.userProjects;
     const term = this.searchTerm.toLowerCase().trim();
-    this.filteredProjects = term
+    let filtered = term
       ? base.filter(p => p.name.toLowerCase().includes(term))
       : [...base];
+    filtered.sort((a, b) => {
+      const scoreA = (a.hasThreeScale ? 2 : 0) + (a.hasKuadrant ? 1 : 0);
+      const scoreB = (b.hasThreeScale ? 2 : 0) + (b.hasKuadrant ? 1 : 0);
+      if (scoreA !== scoreB) return scoreB - scoreA;
+      return a.name.localeCompare(b.name);
+    });
+    this.filteredProjects = filtered;
     this.updatePagination();
   }
 

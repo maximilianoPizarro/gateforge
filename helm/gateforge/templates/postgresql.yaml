@@ -5,7 +5,12 @@ metadata:
   name: {{ include "gateforge.fullname" . }}-postgresql
   labels:
     app: gateforge-postgresql
+    app.kubernetes.io/component: database
+    app.kubernetes.io/name: gateforge-postgresql
+    app.openshift.io/runtime: postgresql
     {{- include "gateforge.labels" . | nindent 4 }}
+  annotations:
+    app.openshift.io/runtime: postgresql
 spec:
   replicas: 1
   selector:
@@ -15,6 +20,7 @@ spec:
     metadata:
       labels:
         app: gateforge-postgresql
+        app.openshift.io/runtime: postgresql
     spec:
       containers:
         - name: postgresql

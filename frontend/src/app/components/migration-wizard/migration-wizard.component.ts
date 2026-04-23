@@ -153,17 +153,45 @@ import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult, FeatureFlags
         </div>
 
         <div class="resources-grid">
-          <div *ngFor="let res of plan.resources; let idx = index" class="resource-card card">
-            <button type="button" class="resource-head" (click)="toggleYaml(idx)" [attr.aria-expanded]="yamlOpen[idx]">
-              <span class="badge badge-kind">{{ res.kind }}</span>
-              <div class="resource-ident">
-                <span class="res-name">{{ res.name }}</span>
-                <span class="res-ns">{{ res.namespace }}</span>
-              </div>
-              <span class="chevron" [class.open]="yamlOpen[idx]">⌄</span>
-            </button>
+          <div *ngFor="let res of plan.resources; let idx = index"
+               class="resource-card card"
+               [class.disabled-resource]="resourceEnabled[idx] === false">
+            <div class="resource-head-row">
+              <label class="resource-toggle" (click)="$event.stopPropagation()">
+                <input type="checkbox"
+                       [checked]="resourceEnabled[idx] !== false"
+                       (change)="toggleResourceEnabled(idx)">
+                <span class="toggle-slider"></span>
+              </label>
+              <button type="button" class="resource-head" (click)="toggleYaml(idx)" [attr.aria-expanded]="yamlOpen[idx]">
+                <span class="badge badge-kind">{{ res.kind }}</span>
+                <div class="resource-ident">
+                  <span class="res-name">{{ res.name }}</span>
+                  <span class="res-ns">{{ res.namespace }}</span>
+                </div>
+                <span class="skip-label" *ngIf="resourceEnabled[idx] === false">SKIP</span>
+                <span class="chevron" [class.open]="yamlOpen[idx]">⌄</span>
+              </button>
+            </div>
             <div *ngIf="yamlOpen[idx]" class="resource-yaml">
-              <pre><code>{{ res.yaml }}</code></pre>
+              <div class="yaml-toolbar-res">
+                <button type="button" class="btn-edit-toggle"
+                        (click)="toggleEdit(idx)"
+                        [class.active]="editMode[idx]">
+                  {{ editMode[idx] ? 'Preview' : 'Edit' }}
+                </button>
+                <button type="button" class="btn-copy-sm" (click)="copyYaml(idx)">Copy</button>
+                <button type="button" class="btn-reset-sm"
+                        *ngIf="editedYamls[idx]"
+                        (click)="resetYaml(idx)">Reset</button>
+              </div>
+              <textarea *ngIf="editMode[idx]"
+                        class="yaml-editor"
+                        [value]="editedYamls[idx] || res.yaml"
+                        (input)="onYamlEdit(idx, $event)"
+                        spellcheck="false"
+                        rows="16"></textarea>
+              <pre *ngIf="!editMode[idx]"><code>{{ editedYamls[idx] || res.yaml }}</code></pre>
             </div>
           </div>
         </div>
@@ -257,7 +285,7 @@ import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult, FeatureFlags
 
       <div class="history-section">
         <div class="history-header" (click)="toggleHistory()">
-          <h2>Migration History / Volver a 3scale</h2>
+          <h2>Migration History / Revert to 3scale</h2>
           <span class="chevron" [class.open]="historyOpen">⌄</span>
         </div>
         <div *ngIf="historyOpen" class="history-body">
@@ -278,7 +306,7 @@ import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult, FeatureFlags
               <button type="button" class="btn-bulk-revert"
                       (click)="confirmBulkRevert()"
                       [disabled]="selectedPlanIds.length === 0 || bulkReverting">
-                {{ bulkReverting ? 'Reverting…' : 'Volver a 3scale (' + selectedPlanIds.length + ')' }}
+                {{ bulkReverting ? 'Reverting…' : 'Revert to 3scale (' + selectedPlanIds.length + ')' }}
               </button>
             </div>
             <div class="history-list">
@@ -567,12 +595,35 @@ import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult, FeatureFlags
       margin-bottom: 24px;
     }
     .resource-card { overflow: hidden; padding: 0; }
+    .resource-card.disabled-resource { opacity: 0.5; border-style: dashed; }
+    .resource-head-row { display: flex; align-items: center; }
+    .resource-toggle {
+      position: relative; display: flex; align-items: center;
+      padding: 14px 0 14px 14px; cursor: pointer;
+    }
+    .resource-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .toggle-slider {
+      width: 36px; height: 20px; border-radius: 10px;
+      background: #d2d2d2; position: relative; transition: background 0.2s;
+      flex-shrink: 0;
+    }
+    .toggle-slider::after {
+      content: ''; position: absolute; width: 16px; height: 16px;
+      border-radius: 50%; background: white; top: 2px; left: 2px;
+      transition: transform 0.2s;
+    }
+    .resource-toggle input:checked + .toggle-slider { background: #3f9c35; }
+    .resource-toggle input:checked + .toggle-slider::after { transform: translateX(16px); }
+    .skip-label {
+      font-size: 0.72rem; font-weight: 700; color: #c9190b;
+      background: #fef3cd; padding: 2px 8px; border-radius: 4px;
+    }
     .resource-head {
-      width: 100%;
+      flex: 1;
       display: flex;
       align-items: center;
       gap: 12px;
-      padding: 14px 16px;
+      padding: 14px 16px 14px 10px;
       border: none;
       background: white;
       cursor: pointer;
@@ -595,6 +646,31 @@ import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult, FeatureFlags
       background: #fafafa;
       padding: 12px 14px 16px;
     }
+    .yaml-toolbar-res {
+      display: flex; gap: 8px; margin-bottom: 8px; justify-content: flex-end;
+    }
+    .btn-edit-toggle {
+      padding: 4px 14px; border-radius: 4px; font-size: 0.78rem; font-weight: 600;
+      cursor: pointer; background: white; color: #151515; border: 1px solid #d2d2d2;
+      font-family: inherit;
+    }
+    .btn-edit-toggle.active { background: #0066cc; color: white; border-color: #0066cc; }
+    .btn-edit-toggle:hover { border-color: #0066cc; }
+    .btn-reset-sm {
+      padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;
+      cursor: pointer; background: #fef3cd; color: #8a5500; border: 1px solid #d4a017;
+      font-family: inherit;
+    }
+    .btn-reset-sm:hover { background: #fde68a; }
+    .yaml-editor {
+      width: 100%; box-sizing: border-box;
+      background: #1e1e1e; color: #d4d4d4;
+      padding: 14px; border-radius: 6px; border: 2px solid #0066cc;
+      font-family: 'Red Hat Mono', 'Courier New', monospace;
+      font-size: 0.82rem; line-height: 1.5;
+      resize: vertical; tab-size: 2;
+    }
+    .yaml-editor:focus { outline: none; border-color: #ee0000; }
     .resource-yaml pre {
       margin: 0;
       background: #1e1e1e;
@@ -844,6 +920,9 @@ export class MigrationWizardComponent implements OnInit {
   analyzing = false;
   plan: MigrationPlan | null = null;
   yamlOpen: Record<number, boolean> = {};
+  editMode: Record<number, boolean> = {};
+  editedYamls: Record<number, string> = {};
+  resourceEnabled: Record<number, boolean> = {};
   applying = false;
   applyResult: ApplyResult | null = null;
   reverting = false;
@@ -953,6 +1032,9 @@ export class MigrationWizardComponent implements OnInit {
       next: (plan) => {
         this.plan = plan;
         this.yamlOpen = {};
+        this.editMode = {};
+        this.editedYamls = {};
+        this.resourceEnabled = {};
         this.step = 3;
         this.analyzing = false;
       },
@@ -965,7 +1047,14 @@ export class MigrationWizardComponent implements OnInit {
   applyMigration(): void {
     if (!this.plan) return;
     this.applying = true;
-    this.api.applyPlan(this.plan.id).subscribe({
+    const excludedIndexes = Object.entries(this.resourceEnabled)
+      .filter(([, v]) => v === false)
+      .map(([k]) => Number(k));
+    const yamlOverrides: Record<string, string> = {};
+    for (const [k, v] of Object.entries(this.editedYamls)) {
+      if (v) yamlOverrides[k] = v;
+    }
+    this.api.applyPlan(this.plan.id, excludedIndexes, yamlOverrides).subscribe({
       next: (result) => {
         this.applyResult = result;
         this.applying = false;
@@ -995,6 +1084,33 @@ export class MigrationWizardComponent implements OnInit {
         this.reverting = false;
       }
     });
+  }
+
+  toggleResourceEnabled(idx: number): void {
+    const current = this.resourceEnabled[idx] !== false;
+    this.resourceEnabled = { ...this.resourceEnabled, [idx]: !current };
+  }
+
+  toggleEdit(idx: number): void {
+    this.editMode = { ...this.editMode, [idx]: !this.editMode[idx] };
+  }
+
+  onYamlEdit(idx: number, event: Event): void {
+    const val = (event.target as HTMLTextAreaElement).value;
+    this.editedYamls = { ...this.editedYamls, [idx]: val };
+  }
+
+  resetYaml(idx: number): void {
+    const copy = { ...this.editedYamls };
+    delete copy[idx];
+    this.editedYamls = copy;
+    this.editMode = { ...this.editMode, [idx]: false };
+  }
+
+  copyYaml(idx: number): void {
+    if (!this.plan) return;
+    const yaml = this.editedYamls[idx] || this.plan.resources[idx].yaml;
+    navigator.clipboard.writeText(yaml);
   }
 
   toggleYaml(idx: number): void {
