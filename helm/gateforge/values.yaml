@@ -54,7 +54,7 @@ clusterDomain: apps.cluster.example.com
 developerHub:
   enabled: false
   url: ""
-  pluginWebhookUrl: ""
+  pluginWebhookUrl: "http://gateforge-devhub-plugin.developer-hub.svc.cluster.local:7007/api/gateforge/migration-event"
 
 connectivityLink:
   targetNamespace: kuadrant-system

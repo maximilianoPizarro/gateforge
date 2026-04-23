@@ -1,5 +1,4 @@
-import { Router, Request, Response, json } from 'express';
-import { LoggerService } from '@backstage/backend-plugin-api';
+import { Router, Request, Response } from 'express';
 
 interface MigrationProduct {
   systemName: string;
@@ -21,14 +20,13 @@ interface MigrationEvent {
   products: MigrationProduct[];
   resources: MigrationResource[];
   clusterDomain: string;
+  timestamp?: string;
 }
 
 const migrationEvents: MigrationEvent[] = [];
 
-export function createRouter(options: { logger: LoggerService }): Router {
-  const { logger } = options;
+export function createRouter(): Router {
   const router = Router();
-  router.use(json());
 
   router.post('/migration-event', (req: Request, res: Response) => {
     const event = req.body as MigrationEvent;
@@ -38,8 +36,11 @@ export function createRouter(options: { logger: LoggerService }): Router {
       return;
     }
 
-    logger.info(
-      `Received ${event.event} for plan ${event.planId} with ${event.products.length} products`,
+    event.timestamp = event.timestamp ?? new Date().toISOString();
+
+    console.log(
+      `[GateForge] Received ${event.event} for plan ${event.planId} ` +
+      `with ${event.products.length} products`,
     );
 
     migrationEvents.push(event);
@@ -47,17 +48,15 @@ export function createRouter(options: { logger: LoggerService }): Router {
     if (event.event === 'migration-applied') {
       for (const product of event.products) {
         const entity = buildCatalogEntity(product, event);
-        logger.info(
-          `Catalog entity generated: ${entity.metadata.name} (ns: ${entity.metadata.namespace})`,
+        console.log(
+          `[GateForge] Catalog entity: ${entity.metadata.name} (ns: ${entity.metadata.namespace})`,
         );
       }
     }
 
     if (event.event === 'migration-reverted') {
       for (const product of event.products) {
-        logger.info(
-          `Migration reverted for ${product.systemName} — catalog entity should be removed`,
-        );
+        console.log(`[GateForge] Reverted: ${product.systemName}`);
       }
     }
 
@@ -69,11 +68,20 @@ export function createRouter(options: { logger: LoggerService }): Router {
   });
 
   router.get('/events', (_req: Request, res: Response) => {
-    res.json(migrationEvents);
+    res.json({
+      total: migrationEvents.length,
+      events: migrationEvents.slice(-100),
+    });
   });
 
   router.get('/health', (_req: Request, res: Response) => {
-    res.json({ status: 'ok', plugin: 'gateforge-devhub', events: migrationEvents.length });
+    res.json({
+      status: 'ok',
+      plugin: 'gateforge-devhub',
+      version: '0.1.7',
+      events: migrationEvents.length,
+      uptime: process.uptime(),
+    });
   });
 
   return router;
