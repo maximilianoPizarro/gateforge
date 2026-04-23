@@ -395,20 +395,26 @@ public class MigrationService {
     private String patchKuadrantctlOutput(String yaml, String kind, String name,
             String namespace, String gatewayName, String gwNamespace,
             String productSysName, String hostname) {
+        yaml = yaml.replace("\r\n", "\n").replace("\r", "\n");
+
+        yaml = yaml.replaceAll("(?m)^\\s*creationTimestamp:\\s*null\\s*\\n", "");
+
         yaml = yaml.replaceFirst("(?m)^  name: .*$", "  name: " + name);
         yaml = yaml.replaceFirst("(?m)^  namespace: .*$", "  namespace: " + namespace);
         if (!yaml.contains("namespace:")) {
             yaml = yaml.replaceFirst("(?m)(  name: " + name + ")", "$1\n  namespace: " + namespace);
         }
 
-        if (!yaml.contains("app.kubernetes.io/managed-by")) {
+        String labelLine = "    \"gateforge.io/product\": \"" + productSysName + "\"";
+        if (yaml.contains("  labels:")) {
+            yaml = yaml.replaceFirst("(?m)^  labels:\\n", "  labels:\n    app.kubernetes.io/managed-by: gateforge\n" + labelLine + "\n");
+        } else {
             String labelsBlock = "metadata:\n"
                     + "  labels:\n"
                     + "    app.kubernetes.io/managed-by: gateforge\n"
-                    + "    \"gateforge.io/product\": \"" + productSysName + "\"";
+                    + labelLine;
             yaml = yaml.replaceFirst("(?m)^metadata:", labelsBlock);
         }
-        yaml = yaml.replaceAll("(?m)^  creationTimestamp: null\n", "");
 
         if ("HTTPRoute".equals(kind)) {
             if (gatewayName != null && !yaml.contains("parentRefs")) {
@@ -879,7 +885,7 @@ public class MigrationService {
                   annotations:
                     networking.istio.io/service-type: ClusterIP
                   labels:
-                    gateforge.io/type: %s
+                    "gateforge.io/type": "%s"
                     app.kubernetes.io/managed-by: gateforge
                 spec:
                   gatewayClassName: %s
@@ -971,7 +977,7 @@ public class MigrationService {
                   namespace: %s
                   labels:
                     app.kubernetes.io/managed-by: gateforge
-                    gateforge.io/product: %s
+                    "gateforge.io/product": "%s"
                 spec:
                   hostnames:
                     - %s
@@ -1038,7 +1044,7 @@ public class MigrationService {
                   namespace: %s
                   labels:
                     app.kubernetes.io/managed-by: gateforge
-                    gateforge.io/product: %s
+                    "gateforge.io/product": "%s"
                 spec:
                   targetRef:
                     group: gateway.networking.k8s.io
@@ -1061,7 +1067,7 @@ public class MigrationService {
                   namespace: %s
                   labels:
                     app.kubernetes.io/managed-by: gateforge
-                    gateforge.io/product: %s
+                    "gateforge.io/product": "%s"
                 spec:
                   targetRef:
                     group: gateway.networking.k8s.io
