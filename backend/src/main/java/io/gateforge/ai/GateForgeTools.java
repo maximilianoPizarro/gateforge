@@ -5,7 +5,7 @@ import io.gateforge.model.ProjectInfo;
 import io.gateforge.model.ThreeScaleProduct;
 import io.gateforge.service.ClusterService;
 import io.gateforge.service.KuadrantCtlService;
-import io.gateforge.service.ThreeScaleAdminApiClient;
+import io.gateforge.service.ThreeScaleSourceRegistry;
 import io.gateforge.service.ThreeScaleService;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -27,7 +27,7 @@ public class GateForgeTools {
     KuadrantCtlService kuadrantCtlService;
 
     @Inject
-    ThreeScaleAdminApiClient adminApiClient;
+    ThreeScaleSourceRegistry sourceRegistry;
 
     @Tool("List all 3scale products discovered from both CRDs and Admin API, showing name, namespace, source, mapping rules count, and backend usages count")
     public String listThreeScaleProducts() {

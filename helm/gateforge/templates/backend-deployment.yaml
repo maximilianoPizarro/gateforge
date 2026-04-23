@@ -52,6 +52,24 @@ spec:
               value: {{ .Values.developerHub.enabled | default false | quote }}
             - name: DEVELOPER_HUB_URL
               value: {{ .Values.developerHub.url | default "" | quote }}
+            - name: THREESCALE_SOURCES
+              value: {{ .Values.threescale.sources | default "" | quote }}
+            - name: TARGET_CLUSTERS
+              value: {{ .Values.targetClusters | default "" | quote }}
+            - name: ARGOCD_CLUSTER_DISCOVERY
+              value: {{ .Values.argocd.clusterDiscovery | default false | quote }}
+            - name: DATASOURCE_URL
+              value: {{ .Values.postgresql.url | default "jdbc:postgresql://gateforge-postgresql:5432/gateforge" | quote }}
+            - name: DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "gateforge.fullname" . }}-config
+                  key: DATASOURCE_USERNAME
+            - name: DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "gateforge.fullname" . }}-config
+                  key: DATASOURCE_PASSWORD
           resources:
             {{- toYaml .Values.backend.resources | nindent 12 }}
           readinessProbe:

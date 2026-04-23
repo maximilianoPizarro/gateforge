@@ -10,11 +10,9 @@
 [![OpenShift](https://img.shields.io/badge/OpenShift-4.21-red)](https://docs.openshift.com/)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://maximilianopizarro.github.io/gateforge/)
 
-AI-powered migration platform for transitioning from **Red Hat 3scale API Management** to **Red Hat Connectivity Link** (Kuadrant) on OpenShift. Built with **Quarkus** (backend) and **Angular** with [Red Hat Design System](https://ux.redhat.com/) (frontend).
+AI-powered migration platform for transitioning from **Red Hat 3scale API Management** to **Red Hat Connectivity Link** (Kuadrant) on OpenShift. Built with **Quarkus** (backend), **Angular** (frontend), **PostgreSQL** (persistence), and **LangChain4j** (AI).
 
-### Video Demo
-
-> Coming soon
+> **v0.1.7** -- Multi-source 3scale, multi-cluster deployment, hub-spoke architecture with PostgreSQL persistence.
 
 ---
 
@@ -22,20 +20,46 @@ AI-powered migration platform for transitioning from **Red Hat 3scale API Manage
 
 | Layer | Technology | Description |
 |-------|-----------|-------------|
-| **Frontend** | Angular 18, @rhds/elements | SPA with RHDS web components, served by Nginx (UBI9) |
+| **Frontend** | Angular 18 | SPA served by Nginx (UBI9) |
 | **Backend** | Quarkus 3.x, Java 17 | REST API, AI agent, MCP servers, kuadrantctl integration |
+| **Persistence** | PostgreSQL 15 | Migration plans, audit trail, federated logs |
+| **DB Migrations** | Flyway | Versioned schema evolution (`db/migration/V*.sql`) |
 | **AI** | LangChain4j, deepseek-r1-distill-qwen-14b | Migration analysis, resource generation, chat assistant |
 | **MCP Servers** | 3scale, Connectivity Link, Kubernetes | Tool calling for AI agent via Model Context Protocol |
-| **Migration** | kuadrantctl, Fabric8 K8s Client | Generate HTTPRoute, AuthPolicy, RateLimitPolicy from 3scale configs |
+| **Migration** | Fabric8 K8s Client | Generate HTTPRoute, AuthPolicy, RateLimitPolicy from 3scale configs |
 | **Packaging** | Helm Chart, Podman Compose | OpenShift deployment + local development |
 
-**Containers:** Backend uses `registry.access.redhat.com/ubi9/openjdk-17`. Frontend uses `registry.access.redhat.com/ubi9/nginx-124`.
+**Containers:** Backend uses `registry.access.redhat.com/ubi9/openjdk-17`. Frontend uses `registry.access.redhat.com/ubi9/nginx-124`. PostgreSQL uses `registry.redhat.io/rhel9/postgresql-15`.
+
+---
+
+## Key Features (v0.1.7)
+
+### Phase 1: Multiple 3scale Sources
+- Connect to **N 3scale Admin API endpoints** simultaneously
+- Products tagged by source cluster (`sourceCluster` field)
+- REST API for source management (`/api/threescale/sources`)
+- Environment variable `THREESCALE_SOURCES` for JSON array configuration
+
+### Phase 2: Multi-Cluster Deployment
+- **Target cluster selector** in Migration Wizard
+- Dynamic Fabric8 `KubernetesClient` per target cluster
+- **ArgoCD cluster secret auto-discovery** from `openshift-gitops` namespace
+- Per-cluster RBAC validation via `SelfSubjectAccessReview`
+- REST API for cluster management (`/api/cluster/targets`)
+
+### Phase 3: Hub-Spoke Architecture
+- **PostgreSQL persistence** for migration plans and audit entries (replaces in-memory storage)
+- **Flyway migrations** for versioned schema evolution (`src/main/resources/db/migration/`)
+- **Federated audit log** with cluster/action filtering (`/api/hub/audit`)
+- **Hub overview API** with aggregated stats (`/api/hub/overview`)
+- **Topology API** showing all clusters and sources (`/api/hub/topology`)
 
 ---
 
 ## Prerequisites
 
-* **OpenShift 4.21** with cluster-admin access
+* **OpenShift 4.21** with cluster-admin or least-privilege RBAC
 * **3scale Operator** installed (for CRD discovery)
 * **Kuadrant Operator** / Connectivity Link installed
 * **Podman** (and optionally **podman-compose**) for local development
@@ -75,6 +99,7 @@ podman-compose up -d --build
 * **Frontend:** http://localhost:4200
 * **Backend API:** http://localhost:8080/api
 * **Health:** http://localhost:8080/q/health
+* **PostgreSQL:** localhost:5432 (user: `gateforge`, db: `gateforge`)
 
 ### Helm Chart (OpenShift)
 
@@ -83,25 +108,75 @@ helm repo add gateforge https://maximilianopizarro.github.io/gateforge/
 helm install gateforge gateforge/gateforge \
   --set ai.apiKey=YOUR_KEY \
   --set threescale.adminApi.url=https://3scale-admin.apps.example.com \
-  --set threescale.adminApi.accessToken=YOUR_TOKEN
+  --set threescale.adminApi.accessToken=YOUR_TOKEN \
+  --set clusterDomain=apps.cluster.example.com
+```
+
+### Multi-Source Configuration
+
+Pass additional 3scale sources as a JSON array:
+
+```bash
+helm install gateforge gateforge/gateforge \
+  --set threescale.sources='[{"id":"prod","label":"Production 3scale","adminUrl":"https://3scale-admin.prod.example.com","accessToken":"TOKEN","enabled":true}]'
+```
+
+### Multi-Cluster Configuration
+
+Add target clusters or enable ArgoCD discovery:
+
+```bash
+helm install gateforge gateforge/gateforge \
+  --set argocd.clusterDiscovery=true \
+  --set targetClusters='[{"id":"staging","label":"Staging Cluster","apiServerUrl":"https://api.staging.example.com:6443","token":"TOKEN","authType":"token","verifySsl":false,"enabled":true}]'
 ```
 
 ---
 
 ## API Endpoints
 
+### Core APIs
+
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| /api/cluster/projects | GET | List all cluster projects (cluster-admin) |
-| /api/threescale/products | GET | List 3scale Product CRDs |
-| /api/threescale/backends | GET | List 3scale Backend CRDs |
-| /api/migration/analyze | POST | Analyze and plan migration |
+| /api/cluster/projects | GET | List all cluster projects |
+| /api/threescale/products | GET | List 3scale Products (all sources, CRD + Admin API) |
+| /api/threescale/backends | GET | List 3scale Backends (all sources) |
+| /api/threescale/status | GET | Admin API connectivity status |
+| /api/migration/analyze | POST | Analyze and plan migration (with target cluster) |
 | /api/migration/plans | GET | List migration plans |
+| /api/migration/plans/{id}/apply | POST | Apply plan to target cluster |
+| /api/migration/plans/{id}/revert | POST | Revert plan from target cluster |
+| /api/migration/revert-bulk | POST | Bulk revert to 3scale |
 | /api/audit/reports | GET | View audit log |
 | /api/chat | POST | AI migration assistant |
-| /api/chat/status | GET | Chat status |
-| /q/health/ready | GET | Readiness probe |
-| /q/health/live | GET | Liveness probe |
+
+### Multi-Source APIs (Phase 1)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| /api/threescale/sources | GET | List all 3scale sources |
+| /api/threescale/sources | POST | Add a new 3scale source |
+| /api/threescale/sources/{id} | DELETE | Remove a 3scale source |
+| /api/threescale/sources/{id}/status | GET | Check source connectivity |
+
+### Multi-Cluster APIs (Phase 2)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| /api/cluster/targets | GET | List target clusters |
+| /api/cluster/targets | POST | Add a target cluster |
+| /api/cluster/targets/{id} | DELETE | Remove a target cluster |
+| /api/cluster/targets/{id}/validate | GET | Validate RBAC access on target |
+
+### Hub-Spoke APIs (Phase 3)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| /api/hub/overview | GET | Aggregated hub stats (plans, clusters, audit) |
+| /api/hub/audit | GET | Federated audit log (filter by cluster, action) |
+| /api/hub/plans | GET | Federated plans (filter by cluster, status) |
+| /api/hub/topology | GET | Cluster + source topology graph |
 
 ---
 
@@ -109,18 +184,24 @@ helm install gateforge gateforge/gateforge \
 
 | Value | Default | Description |
 |-------|---------|-------------|
-| backend.image.tag | latest | Backend image tag |
-| frontend.image.tag | latest | Frontend image tag |
-| ai.enabled | true | Enable AI features |
-| ai.endpoint | litellm-prod...  | LLM endpoint URL |
-| ai.model | deepseek-r1-distill-qwen-14b | AI model name |
-| ai.apiKey | "" | LLM API key |
-| threescale.adminApi.url | "" | 3scale Admin Portal URL |
-| threescale.adminApi.accessToken | "" | 3scale access token |
-| connectivityLink.gatewayStrategy | shared | shared / dual / dedicated |
-| connectivityLink.gatewayClassName | istio | Gateway class |
-| rbac.clusterAdmin | true | Bind cluster-admin role |
-| route.enabled | true | Create OpenShift Route |
+| `backend.image.tag` | v0.1.7 | Backend image tag |
+| `frontend.image.tag` | v0.1.7 | Frontend image tag |
+| `ai.enabled` | true | Enable AI features |
+| `ai.endpoint` | litellm-prod... | LLM endpoint URL |
+| `ai.model` | deepseek-r1-distill-qwen-14b | AI model name |
+| `ai.apiKey` | "" | LLM API key |
+| `threescale.adminApi.url` | "" | 3scale Admin Portal URL |
+| `threescale.adminApi.accessToken` | "" | 3scale access token |
+| `threescale.sources` | "" | JSON array of additional 3scale sources |
+| `targetClusters` | "" | JSON array of target clusters |
+| `argocd.clusterDiscovery` | false | Auto-discover clusters from ArgoCD secrets |
+| `postgresql.enabled` | true | Deploy PostgreSQL for persistence |
+| `postgresql.username` | gateforge | Database username |
+| `postgresql.password` | gateforge | Database password |
+| `connectivityLink.gatewayStrategy` | shared | shared / dual / dedicated |
+| `connectivityLink.gatewayClassName` | istio | Gateway class |
+| `rbac.clusterAdmin` | false | Use cluster-admin (dev only) vs least-privilege |
+| `route.enabled` | true | Create OpenShift Route |
 
 ---
 
@@ -133,7 +214,6 @@ helm install gateforge gateforge/gateforge \
 * [3scale Operator](https://github.com/3scale/3scale-operator)
 * [Gateway API](https://gateway-api.sigs.k8s.io/)
 * [Quarkus LangChain4j + MCP](https://quarkus.io/blog/quarkus-langchain4j-mcp/)
-* [Red Hat Design System](https://ux.redhat.com/)
 * [Migration Guide (ONLU)](https://onlu.ch/en/migration-path-from-red-hat-3scale-api-management-to-red-hat-connectivity-link/)
 
 ---

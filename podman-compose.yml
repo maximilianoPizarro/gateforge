@@ -1,5 +1,20 @@
 version: "3.8"
 services:
+  postgresql:
+    image: registry.redhat.io/rhel9/postgresql-15:latest
+    container_name: gateforge-postgresql
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRESQL_USER: gateforge
+      POSTGRESQL_PASSWORD: gateforge
+      POSTGRESQL_DATABASE: gateforge
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "gateforge"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: ./backend
@@ -14,8 +29,17 @@ services:
       AI_API_KEY: ${AI_API_KEY:-dummy}
       THREESCALE_ADMIN_URL: ${THREESCALE_ADMIN_URL:-}
       THREESCALE_ACCESS_TOKEN: ${THREESCALE_ACCESS_TOKEN:-}
+      THREESCALE_SOURCES: ${THREESCALE_SOURCES:-}
+      TARGET_CLUSTERS: ${TARGET_CLUSTERS:-}
+      ARGOCD_CLUSTER_DISCOVERY: ${ARGOCD_CLUSTER_DISCOVERY:-false}
+      DATASOURCE_URL: jdbc:postgresql://postgresql:5432/gateforge
+      DATASOURCE_USERNAME: gateforge
+      DATASOURCE_PASSWORD: gateforge
       QUARKUS_KUBERNETES_CLIENT_MASTER_URL: ${KUBE_API_URL:-}
       QUARKUS_KUBERNETES_CLIENT_TOKEN: ${KUBE_TOKEN:-}
+    depends_on:
+      postgresql:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/q/health/ready"]
       interval: 10s

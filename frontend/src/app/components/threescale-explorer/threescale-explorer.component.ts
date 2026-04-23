@@ -122,8 +122,9 @@ type SourceTab = 'all' | 'crd' | 'admin-api';
                 <div class="title-row">
                   <h3 class="product-title">{{ product.name }}</h3>
                   <div class="badge-row">
-                    <span class="badge" [class.badge-crd]="product.source === 'CRD'" [class.badge-api]="product.source === 'Admin API'" [class.badge-merged]="product.source === 'CRD + Admin API'">{{ product.source }}</span>
+                    <span class="badge" [class.badge-crd]="product.source === 'CRD'" [class.badge-api]="product.source.includes('Admin API')" [class.badge-merged]="product.source.includes('CRD + Admin API')">{{ product.source }}</span>
                     <span class="badge badge-ns">{{ product.backendNamespace || product.namespace }}</span>
+                    <span class="badge badge-cluster" *ngIf="product.sourceCluster && product.sourceCluster !== 'local'">{{ product.sourceCluster }}</span>
                   </div>
                 </div>
                 <p class="system-name"><span class="meta-label">systemName</span> {{ product.systemName || '—' }}</p>
@@ -306,6 +307,7 @@ type SourceTab = 'all' | 'crd' | 'admin-api';
     .badge-api { background: #fff4e6; color: #8a5500; }
     .badge-merged { background: #e8eaf6; color: #283593; }
     .badge-method { background: #f5f5f5; color: #151515; border: 1px solid #d2d2d2; }
+    .badge-cluster { background: #fce4ec; color: #880e4f; }
 
     .system-name { margin: 10px 0 6px; font-size: 0.88rem; color: #6a6e73; }
     .meta-label { font-weight: 600; color: #151515; margin-right: 6px; }

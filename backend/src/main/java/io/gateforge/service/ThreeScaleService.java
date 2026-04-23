@@ -22,7 +22,7 @@ public class ThreeScaleService {
     KubernetesClient kubernetesClient;
 
     @Inject
-    ThreeScaleAdminApiClient adminApiClient;
+    ThreeScaleSourceRegistry sourceRegistry;
 
     @ConfigProperty(name = "gateforge.threescale.crd-discovery", defaultValue = "true")
     boolean crdDiscoveryEnabled;
@@ -41,12 +41,6 @@ public class ThreeScaleService {
             .withScope("Namespaced")
             .build();
 
-    /**
-     * Returns products from both CRDs and Admin API, deduped by systemName.
-     * When both sources provide the same product, enriches the CRD product
-     * with Admin API data (mapping rules, backend usages, auth) when the CRD
-     * version is missing that information.
-     */
     public List<ThreeScaleProduct> listProducts() {
         Map<String, ThreeScaleProduct> crdProducts = new LinkedHashMap<>();
         Map<String, ThreeScaleProduct> apiProducts = new LinkedHashMap<>();
@@ -57,23 +51,36 @@ public class ThreeScaleService {
             }
         }
 
-        if (adminApiClient.isConfigured()) {
-            for (ThreeScaleProduct p : listProductsFromAdminApi()) {
-                apiProducts.put(p.systemName(), p);
+        for (ThreeScaleAdminApiClient client : sourceRegistry.getAllClients()) {
+            if (!client.isConfigured()) continue;
+            for (ThreeScaleProduct p : listProductsFromAdminApi(client)) {
+                String key = client.getSourceId() + ":" + p.systemName();
+                apiProducts.put(key, p);
             }
         }
 
         Map<String, ThreeScaleProduct> merged = new LinkedHashMap<>();
         for (var entry : crdProducts.entrySet()) {
             ThreeScaleProduct crd = entry.getValue();
-            ThreeScaleProduct api = apiProducts.remove(entry.getKey());
+            ThreeScaleProduct api = null;
+            for (var apiEntry : apiProducts.entrySet()) {
+                if (apiEntry.getKey().endsWith(":" + entry.getKey())) {
+                    api = apiEntry.getValue();
+                    apiProducts.remove(apiEntry.getKey());
+                    break;
+                }
+            }
             if (api != null) {
                 merged.put(entry.getKey(), enrichProduct(crd, api));
             } else {
                 merged.put(entry.getKey(), crd);
             }
         }
-        merged.putAll(apiProducts);
+        for (var apiEntry : apiProducts.entrySet()) {
+            String key = apiEntry.getKey();
+            String sysName = key.contains(":") ? key.substring(key.indexOf(':') + 1) : key;
+            merged.put(key, apiEntry.getValue());
+        }
 
         Map<String, String[]> backendEndpoints = resolveBackendEndpointMap();
         List<ThreeScaleProduct> result = new ArrayList<>();
@@ -90,12 +97,12 @@ public class ThreeScaleService {
                 ? api.backendUsages() : crd.backendUsages();
         Map<String, Object> auth = (crd.authentication() == null || crd.authentication().isEmpty())
                 ? api.authentication() : crd.authentication();
-        String source = "CRD + Admin API";
+        String source = "CRD + Admin API (" + api.sourceCluster() + ")";
         return new ThreeScaleProduct(
                 crd.name(), crd.namespace(), crd.systemName(),
                 crd.description().isEmpty() ? api.description() : crd.description(),
                 crd.deploymentOption(), rules, usages, auth, source,
-                null, null
+                null, null, api.sourceCluster()
         );
     }
 
@@ -112,6 +119,7 @@ public class ThreeScaleService {
                     b.put("name", r.getMetadata().getName());
                     b.put("namespace", r.getMetadata().getNamespace());
                     b.put("source", "CRD");
+                    b.put("sourceCluster", "local");
                     b.put("spec", r.getAdditionalProperties().getOrDefault("spec", Collections.emptyMap()));
                     backends.add(b);
                 }
@@ -120,9 +128,10 @@ public class ThreeScaleService {
             }
         }
 
-        if (adminApiClient.isConfigured()) {
+        for (ThreeScaleAdminApiClient client : sourceRegistry.getAllClients()) {
+            if (!client.isConfigured()) continue;
             try {
-                List<Map<String, Object>> apiBackends = adminApiClient.listBackendApis();
+                List<Map<String, Object>> apiBackends = client.listBackendApis();
                 for (Map<String, Object> ab : apiBackends) {
                     Map<String, Object> b = new LinkedHashMap<>();
                     b.put("name", String.valueOf(ab.getOrDefault("name", "")));
@@ -131,12 +140,13 @@ public class ThreeScaleService {
                     b.put("privateEndpoint", ab.getOrDefault("private_endpoint", ""));
                     b.put("description", ab.getOrDefault("description", ""));
                     b.put("source", "Admin API");
+                    b.put("sourceCluster", client.getSourceId());
                     b.put("createdAt", ab.getOrDefault("created_at", ""));
                     b.put("updatedAt", ab.getOrDefault("updated_at", ""));
                     backends.add(b);
                 }
             } catch (Exception e) {
-                LOG.log(Level.WARNING, "Admin API backend discovery failed", e);
+                LOG.log(Level.WARNING, "Admin API backend discovery failed for source " + client.getSourceId(), e);
             }
         }
 
@@ -154,21 +164,30 @@ public class ThreeScaleService {
 
     public Map<String, Object> getAdminApiStatus() {
         Map<String, Object> status = new LinkedHashMap<>();
-        status.put("configured", adminApiClient.isConfigured());
         status.put("crdDiscoveryEnabled", crdDiscoveryEnabled);
 
-        if (adminApiClient.isConfigured()) {
-            try {
-                List<Map<String, Object>> services = adminApiClient.listServices();
-                List<Map<String, Object>> backendApis = adminApiClient.listBackendApis();
-                List<Map<String, Object>> activeDocs = adminApiClient.listActiveDocs();
-                status.put("reachable", true);
-                status.put("productCount", services.size());
-                status.put("backendApiCount", backendApis.size());
-                status.put("activeDocsCount", activeDocs.size());
-            } catch (Exception e) {
-                status.put("reachable", false);
-                status.put("error", e.getMessage());
+        List<Map<String, Object>> sourceStatuses = new ArrayList<>();
+        for (ThreeScaleAdminApiClient client : sourceRegistry.getAllClients()) {
+            sourceStatuses.add(sourceRegistry.getSourceStatus(client.getSourceId()));
+        }
+        status.put("sources", sourceStatuses);
+        status.put("configured", sourceRegistry.hasConfiguredClients());
+
+        if (sourceRegistry.hasConfiguredClients()) {
+            ThreeScaleAdminApiClient client = sourceRegistry.getDefaultClient();
+            if (client != null && client.isConfigured()) {
+                try {
+                    List<Map<String, Object>> services = client.listServices();
+                    List<Map<String, Object>> backendApis = client.listBackendApis();
+                    List<Map<String, Object>> activeDocs = client.listActiveDocs();
+                    status.put("reachable", true);
+                    status.put("productCount", services.size());
+                    status.put("backendApiCount", backendApis.size());
+                    status.put("activeDocsCount", activeDocs.size());
+                } catch (Exception e) {
+                    status.put("reachable", false);
+                    status.put("error", e.getMessage());
+                }
             }
         }
 
@@ -185,8 +204,6 @@ public class ThreeScaleService {
             return null;
         }
     }
-
-    // --- CRD-based discovery ---
 
     private List<ThreeScaleProduct> listProductsFromCrds() {
         List<ThreeScaleProduct> products = new ArrayList<>();
@@ -223,17 +240,15 @@ public class ThreeScaleService {
                 resource.getMetadata().getNamespace(),
                 systemName, description, deployment,
                 mappingRules, backendUsages, auth, "CRD",
-                null, null
+                null, null, "local"
         );
     }
 
-    // --- Admin API-based discovery ---
-
     @SuppressWarnings("unchecked")
-    private List<ThreeScaleProduct> listProductsFromAdminApi() {
+    private List<ThreeScaleProduct> listProductsFromAdminApi(ThreeScaleAdminApiClient client) {
         List<ThreeScaleProduct> products = new ArrayList<>();
         try {
-            List<Map<String, Object>> services = adminApiClient.listServices();
+            List<Map<String, Object>> services = client.listServices();
             for (Map<String, Object> svc : services) {
                 long serviceId = toLong(svc.get("id"));
                 String name = String.valueOf(svc.getOrDefault("name", ""));
@@ -243,7 +258,7 @@ public class ThreeScaleService {
 
                 List<ThreeScaleProduct.MappingRule> mappingRules = new ArrayList<>();
                 try {
-                    List<Map<String, Object>> rules = adminApiClient.listMappingRules(serviceId);
+                    List<Map<String, Object>> rules = client.listMappingRules(serviceId);
                     for (Map<String, Object> rule : rules) {
                         mappingRules.add(new ThreeScaleProduct.MappingRule(
                                 String.valueOf(rule.getOrDefault("http_method", "GET")),
@@ -258,7 +273,7 @@ public class ThreeScaleService {
 
                 List<ThreeScaleProduct.BackendUsage> backendUsages = new ArrayList<>();
                 try {
-                    List<Map<String, Object>> usages = adminApiClient.listBackendUsages(serviceId);
+                    List<Map<String, Object>> usages = client.listBackendUsages(serviceId);
                     for (Map<String, Object> usage : usages) {
                         long backendId = toLong(usage.get("backend_id"));
                         String path = String.valueOf(usage.getOrDefault("path", "/"));
@@ -272,7 +287,7 @@ public class ThreeScaleService {
 
                 Map<String, Object> auth = new LinkedHashMap<>();
                 try {
-                    Map<String, Object> proxy = adminApiClient.getServiceProxy(serviceId);
+                    Map<String, Object> proxy = client.getServiceProxy(serviceId);
                     if (!proxy.isEmpty()) {
                         auth.put("credentials_location", proxy.getOrDefault("credentials_location", ""));
                         auth.put("auth_app_key", proxy.getOrDefault("auth_app_key", ""));
@@ -286,40 +301,41 @@ public class ThreeScaleService {
                 products.add(new ThreeScaleProduct(
                         name, "admin-api",
                         systemName, description, deployment,
-                        mappingRules, backendUsages, auth, "Admin API",
-                        null, null
+                        mappingRules, backendUsages, auth,
+                        "Admin API (" + client.getSourceId() + ")",
+                        null, null, client.getSourceId()
                 ));
             }
         } catch (Exception e) {
-            LOG.log(Level.WARNING, "Admin API product discovery failed", e);
+            LOG.log(Level.WARNING, "Admin API product discovery failed for source " + client.getSourceId(), e);
         }
         return products;
     }
 
-    // --- Backend namespace resolution ---
-
     private Map<String, String[]> resolveBackendEndpointMap() {
         Map<String, String[]> map = new HashMap<>();
-        if (!adminApiClient.isConfigured()) return map;
-        try {
-            List<Map<String, Object>> backends = adminApiClient.listBackendApis();
-            for (Map<String, Object> b : backends) {
-                String ep = String.valueOf(b.getOrDefault("private_endpoint", ""));
-                if (ep.isBlank()) continue;
+        for (ThreeScaleAdminApiClient client : sourceRegistry.getAllClients()) {
+            if (!client.isConfigured()) continue;
+            try {
+                List<Map<String, Object>> backends = client.listBackendApis();
+                for (Map<String, Object> b : backends) {
+                    String ep = String.valueOf(b.getOrDefault("private_endpoint", ""));
+                    if (ep.isBlank()) continue;
 
-                String sysName = String.valueOf(b.getOrDefault("system_name", ""));
-                String bName = String.valueOf(b.getOrDefault("name", ""));
-                Object idObj = b.get("id");
-                long id = idObj instanceof Number n ? n.longValue() : 0L;
+                    String sysName = String.valueOf(b.getOrDefault("system_name", ""));
+                    String bName = String.valueOf(b.getOrDefault("name", ""));
+                    Object idObj = b.get("id");
+                    long id = idObj instanceof Number n ? n.longValue() : 0L;
 
-                String[] svcInfo = extractSvcInfo(ep);
+                    String[] svcInfo = extractSvcInfo(ep);
 
-                if (!sysName.isBlank()) map.put(sysName, svcInfo);
-                if (!bName.isBlank()) map.put(bName, svcInfo);
-                if (id > 0) map.put("backend-" + id, svcInfo);
+                    if (!sysName.isBlank()) map.put(sysName, svcInfo);
+                    if (!bName.isBlank()) map.put(bName, svcInfo);
+                    if (id > 0) map.put("backend-" + id, svcInfo);
+                }
+            } catch (Exception e) {
+                LOG.log(Level.WARNING, "Failed to resolve backend endpoints for source " + client.getSourceId(), e);
             }
-        } catch (Exception e) {
-            LOG.log(Level.WARNING, "Failed to resolve backend endpoints", e);
         }
         return map;
     }
@@ -332,7 +348,7 @@ public class ThreeScaleService {
                         p.name(), p.namespace(), p.systemName(),
                         p.description(), p.deploymentOption(),
                         p.mappingRules(), p.backendUsages(), p.authentication(),
-                        p.source(), info[1], info[0]
+                        p.source(), info[1], info[0], p.sourceCluster()
                 );
             }
         }
@@ -352,8 +368,6 @@ public class ThreeScaleService {
         } catch (Exception ignored) {}
         return new String[]{"", ""};
     }
-
-    // --- Helpers ---
 
     @SuppressWarnings("unchecked")
     private List<ThreeScaleProduct.MappingRule> extractMappingRules(Map<String, Object> spec) {

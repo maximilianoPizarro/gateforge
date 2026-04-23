@@ -2,7 +2,7 @@ import { Component, CUSTOM_ELEMENTS_SCHEMA, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult, FeatureFlags, BulkRevertResult, TestCommand } from '../../services/api.service';
+import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult, FeatureFlags, BulkRevertResult, TestCommand, TargetCluster } from '../../services/api.service';
 
 @Component({
   selector: 'app-migration-wizard',
@@ -113,6 +113,21 @@ import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult, FeatureFlags
           </label>
         </div>
 
+        <div *ngIf="targetClusters.length > 1" class="cluster-selector">
+          <h3>Target cluster</h3>
+          <p class="step-desc">Choose which cluster receives the migrated resources.</p>
+          <div class="cluster-grid">
+            <label *ngFor="let c of targetClusters" class="cluster-card card" [class.selected]="selectedClusterId === c.id">
+              <input type="radio" class="visually-hidden" name="targetCluster" [value]="c.id" [(ngModel)]="selectedClusterId">
+              <div class="cluster-icon" aria-hidden="true">{{ c.id === 'local' ? '⎈' : '☁' }}</div>
+              <div class="cluster-text">
+                <span class="cluster-name">{{ c.label }}</span>
+                <span class="cluster-url" *ngIf="c.apiServerUrl">{{ c.apiServerUrl }}</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
         <div class="actions">
           <button type="button" class="btn-secondary" (click)="step = 1">Back</button>
           <button type="button" class="btn-primary" (click)="analyze()" [disabled]="analyzing">
@@ -133,6 +148,7 @@ import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult, FeatureFlags
           <div class="banner-meta">
             <span class="pill pill-strategy">Strategy: {{ plan.gatewayStrategy }}</span>
             <span class="pill pill-muted">Products: {{ plan.sourceProducts.join(', ') || '—' }}</span>
+            <span class="pill pill-cluster" *ngIf="plan.targetClusterLabel">{{ plan.targetClusterLabel }}</span>
           </div>
         </div>
 
@@ -807,6 +823,16 @@ import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult, FeatureFlags
     .page-btn:hover:not(:disabled) { border-color: #ee0000; color: #ee0000; }
     .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .page-info { font-size: 0.82rem; color: #6a6e73; }
+
+    .cluster-selector { margin-top: 28px; }
+    .cluster-selector h3 { font-family: 'Red Hat Display', sans-serif; font-size: 1.1rem; margin: 0 0 4px; }
+    .cluster-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin-bottom: 24px; }
+    .cluster-card { display: flex; gap: 12px; padding: 16px 18px; cursor: pointer; align-items: center; }
+    .cluster-card.selected { border-color: #0066cc; box-shadow: 0 4px 18px rgba(0,102,204,0.12); }
+    .cluster-icon { width: 40px; height: 40px; border-radius: 10px; background: #f5f5f5; border: 1px solid #d2d2d2; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; flex-shrink: 0; }
+    .cluster-name { display: block; font-weight: 600; color: #151515; font-size: 0.95rem; }
+    .cluster-url { display: block; font-size: 0.78rem; color: #6a6e73; word-break: break-all; }
+    .pill-cluster { background: #e8eaf6; border-color: #3f51b5; color: #283593; font-weight: 600; }
   `]
 })
 export class MigrationWizardComponent implements OnInit {
@@ -836,6 +862,8 @@ export class MigrationWizardComponent implements OnInit {
   productSearchQuery = '';
   migrateProductPage = 1;
   migratePageSize = 24;
+  targetClusters: TargetCluster[] = [];
+  selectedClusterId = 'local';
 
   strategies = [
     {
@@ -910,6 +938,10 @@ export class MigrationWizardComponent implements OnInit {
         this.developerHubUrl = f.developerHub?.url ?? '';
       }
     });
+    this.api.getTargetClusters().subscribe({
+      next: (clusters) => this.targetClusters = clusters,
+      error: () => this.targetClusters = [{ id: 'local', label: 'Local (in-cluster)', apiServerUrl: '', token: '', authType: 'in-cluster', verifySsl: true, enabled: true }]
+    });
   }
 
   analyze(): void {
@@ -917,7 +949,7 @@ export class MigrationWizardComponent implements OnInit {
     this.applyResult = null;
     this.revertResult = null;
     const selected = this.products.filter(p => p.selected).map(p => p.product.name);
-    this.api.analyzeMigration(this.gatewayStrategy, selected).subscribe({
+    this.api.analyzeMigration(this.gatewayStrategy, selected, this.selectedClusterId).subscribe({
       next: (plan) => {
         this.plan = plan;
         this.yamlOpen = {};

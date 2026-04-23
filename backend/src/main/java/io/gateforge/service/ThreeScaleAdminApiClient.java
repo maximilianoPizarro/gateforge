@@ -2,9 +2,6 @@ package io.gateforge.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -15,23 +12,31 @@ import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-@ApplicationScoped
+/**
+ * Non-CDI client for a single 3scale Admin API instance.
+ * Instances are created by ThreeScaleSourceRegistry.
+ */
 public class ThreeScaleAdminApiClient {
 
     private static final Logger LOG = Logger.getLogger(ThreeScaleAdminApiClient.class.getName());
 
-    @ConfigProperty(name = "gateforge.threescale.admin-url", defaultValue = "http://localhost")
-    String adminUrl;
+    private final String sourceId;
+    private final String adminUrl;
+    private final String accessToken;
+    private final ObjectMapper objectMapper;
+    private final HttpClient httpClient;
 
-    @ConfigProperty(name = "gateforge.threescale.access-token", defaultValue = "none")
-    String accessToken;
+    public ThreeScaleAdminApiClient(String sourceId, String adminUrl, String accessToken, ObjectMapper objectMapper) {
+        this.sourceId = sourceId;
+        this.adminUrl = adminUrl;
+        this.accessToken = accessToken;
+        this.objectMapper = objectMapper;
+        this.httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(15))
+                .build();
+    }
 
-    @Inject
-    ObjectMapper objectMapper;
-
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(15))
-            .build();
+    public String getSourceId() { return sourceId; }
 
     public boolean isConfigured() {
         return adminUrl != null
@@ -102,7 +107,7 @@ public class ThreeScaleAdminApiClient {
                 if (collection.size() < perPage) break;
                 page++;
             } catch (Exception e) {
-                LOG.log(Level.WARNING, "Error fetching " + path + " page " + page, e);
+                LOG.log(Level.WARNING, "Error fetching " + path + " page " + page + " from source " + sourceId, e);
                 break;
             }
         }
@@ -118,7 +123,7 @@ public class ThreeScaleAdminApiClient {
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() != 200) {
-            LOG.warning("3scale Admin API returned " + response.statusCode() + " for " + url);
+            LOG.warning("3scale Admin API [" + sourceId + "] returned " + response.statusCode() + " for " + url);
             return null;
         }
         return objectMapper.readTree(response.body());

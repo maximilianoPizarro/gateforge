@@ -1,0 +1,70 @@
+{{- if .Values.postgresql.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "gateforge.fullname" . }}-postgresql
+  labels:
+    app: gateforge-postgresql
+    {{- include "gateforge.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gateforge-postgresql
+  template:
+    metadata:
+      labels:
+        app: gateforge-postgresql
+    spec:
+      containers:
+        - name: postgresql
+          image: registry.redhat.io/rhel9/postgresql-15:latest
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRESQL_USER
+              value: {{ .Values.postgresql.username | default "gateforge" | quote }}
+            - name: POSTGRESQL_PASSWORD
+              value: {{ .Values.postgresql.password | default "gateforge" | quote }}
+            - name: POSTGRESQL_DATABASE
+              value: "gateforge"
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/pgsql/data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "gateforge"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "gateforge"]
+            initialDelaySeconds: 15
+            periodSeconds: 20
+      volumes:
+        - name: pgdata
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "gateforge.fullname" . }}-postgresql
+  labels:
+    app: gateforge-postgresql
+    {{- include "gateforge.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+  selector:
+    app: gateforge-postgresql
+{{- end }}

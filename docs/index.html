@@ -5,10 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>GateForge - 3scale to Connectivity Link Migration</title>
   <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
-  <link rel="stylesheet" href="https://static.redhat.com/libs/redhat/redhat-font/4/webfonts/red-hat-font.min.css">
-  <script type="module" src="https://cdn.jsdelivr.net/npm/@rhds/elements@4/elements/rh-card/rh-card.js"></script>
-  <script type="module" src="https://cdn.jsdelivr.net/npm/@rhds/elements@4/elements/rh-cta/rh-cta.js"></script>
-  <script type="module" src="https://cdn.jsdelivr.net/npm/@rhds/elements@4/elements/rh-footer/rh-footer.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@400;600;700&family=Red+Hat+Text:wght@400;500;600&family=Red+Hat+Mono&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Red Hat Text', sans-serif; color: #151515; line-height: 1.6; }
@@ -23,6 +22,10 @@
     .hero p { font-size: 1.15rem; color: #c9c9c9; max-width: 700px; margin: 0 auto 24px; }
     .hero .badges { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 24px; }
     .hero .badges img { width: auto; height: 22px; }
+    .hero .version-tag {
+      display: inline-block; background: #3f9c35; color: white; padding: 4px 16px;
+      border-radius: 999px; font-size: 0.85rem; font-weight: 700; margin-bottom: 16px;
+    }
 
     .experimental-banner {
       display: flex; align-items: center; gap: 12px; justify-content: center;
@@ -94,7 +97,6 @@
     }
     .compat-tested { background: #e6f5e0; color: #2d6b24; }
     .compat-compatible { background: #e0ecff; color: #0066cc; }
-    .compat-untested { background: #f5f5f5; color: #6a6e73; }
 
     .screenshot-grid {
       display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
@@ -131,8 +133,8 @@
     }
     .lightbox-close:hover { color: #ff6666; }
 
-    .vision-section { background: #f9f9f9; border: 1px solid #d2d2d2; border-radius: 8px; padding: 24px; margin: 24px 0; }
-    .vision-section h3 { color: #0066cc; margin-bottom: 12px; }
+    .phase-section { background: #f9f9f9; border: 1px solid #d2d2d2; border-radius: 8px; padding: 24px; margin: 24px 0; }
+    .phase-section h3 { color: #0066cc; margin-bottom: 12px; }
     .phase-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin: 16px 0; }
     .phase-card {
       background: white; border: 1px solid #d2d2d2; border-radius: 8px; padding: 18px;
@@ -143,9 +145,20 @@
       display: inline-block; padding: 2px 10px; border-radius: 999px;
       font-size: 0.72rem; font-weight: 600; margin-bottom: 8px;
     }
-    .phase-low { background: #e6f5e0; color: #2d6b24; }
-    .phase-medium { background: #fef3cd; color: #856404; }
-    .phase-high { background: #fce4ec; color: #c9190b; }
+    .phase-done { background: #e6f5e0; color: #2d6b24; }
+
+    .api-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.88rem; }
+    .api-table th, .api-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #d2d2d2; }
+    .api-table th { background: #f0f0f0; font-weight: 600; }
+    .api-table code { font-size: 0.82em; }
+    .api-group-label {
+      display: inline-block; padding: 2px 10px; border-radius: 999px;
+      font-size: 0.72rem; font-weight: 600; margin-right: 6px;
+    }
+    .api-group-core { background: #f5f5f5; color: #151515; }
+    .api-group-p1 { background: #e6f5e0; color: #2d6b24; }
+    .api-group-p2 { background: #e0ecff; color: #0066cc; }
+    .api-group-p3 { background: #fce4ec; color: #880e4f; }
   </style>
 </head>
 <body>
@@ -153,11 +166,12 @@
   <section class="hero">
     <img src="assets/logo.svg" alt="GateForge Logo">
     <h1>GateForge</h1>
+    <span class="version-tag">v0.1.7</span>
     <div class="experimental-banner">
       <span class="exp-badge">EXPERIMENTAL</span>
       <span>This project is in early experimental phase. APIs and features may change without notice.</span>
     </div>
-    <p>AI-powered migration platform for transitioning from <strong>Red Hat 3scale API Management</strong> to <strong>Red Hat Connectivity Link</strong> (Kuadrant) on OpenShift. GateForge automates discovery, analysis, resource generation, and validation &mdash; powered by LangChain4j, Model Context Protocol (MCP), and kuadrantctl.</p>
+    <p>AI-powered migration platform for transitioning from <strong>Red Hat 3scale API Management</strong> to <strong>Red Hat Connectivity Link</strong> (Kuadrant) on OpenShift. Now with <strong>multi-source 3scale</strong>, <strong>multi-cluster deployment</strong>, and <strong>persistent hub-spoke architecture</strong>.</p>
     <div class="badges">
       <a href="https://artifacthub.io/packages/search?repo=gateforge"><img src="https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/gateforge" alt="Artifact Hub"></a>
       <a href="https://quay.io/repository/maximilianopizarro/gateforge-backend"><img src="https://img.shields.io/badge/quay.io-backend-blue" alt="Quay Backend"></a>
@@ -169,35 +183,55 @@
 
   <section class="section" style="background:#f5f5f5;">
     <div class="container">
-      <h2>What does GateForge solve?</h2>
-      <p style="color:#6a6e73; margin-bottom:20px; max-width:800px; line-height:1.7;">
-        Organizations running <strong>Red Hat 3scale API Management</strong> need a clear, automated path to <strong>Kubernetes-native API management</strong> via Red Hat Connectivity Link (Kuadrant). Manual migration is complex: mapping 3scale Products, Backends, Mapping Rules, Application Plans, and authentication configs to Gateway API HTTPRoutes, AuthPolicies, and RateLimitPolicies requires deep expertise in both ecosystems.
-      </p>
-      <p style="color:#6a6e73; margin-bottom:20px; max-width:800px; line-height:1.7;">
-        <strong>GateForge</strong> bridges this gap by:
-      </p>
-      <div class="card-grid" style="grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));">
-        <div class="card">
-          <h3>Discovery</h3>
-          <p>Automatically discovers 3scale Products, Backends, and ActiveDocs from both CRDs and the Admin API.</p>
+      <h2>What's New in v0.1.7</h2>
+      <div class="phase-grid">
+        <div class="phase-card">
+          <span class="phase-badge phase-done">Implemented</span>
+          <h4>Phase 1 &mdash; Multiple 3scale Sources</h4>
+          <p>Connect to N 3scale Admin API endpoints. Products tagged by source cluster. REST API for source management. <code>THREESCALE_SOURCES</code> env var for JSON config.</p>
         </div>
-        <div class="card">
-          <h3>Analysis</h3>
-          <p>AI-assisted analysis of your 3scale configuration to generate equivalent Connectivity Link resources.</p>
+        <div class="phase-card">
+          <span class="phase-badge phase-done">Implemented</span>
+          <h4>Phase 2 &mdash; Multi-Cluster Deployment</h4>
+          <p>Target cluster selector in Migration Wizard. ArgoCD cluster secret auto-discovery. Per-cluster RBAC validation. Dynamic Fabric8 KubernetesClient per target.</p>
         </div>
-        <div class="card">
-          <h3>Migration</h3>
-          <p>Generates Gateway, HTTPRoute, AuthPolicy, and RateLimitPolicy YAML with one-click apply to cluster.</p>
-        </div>
-        <div class="card">
-          <h3>Validation</h3>
-          <p>Post-migration test commands, audit trail, and bulk revert to 3scale if needed.</p>
+        <div class="phase-card">
+          <span class="phase-badge phase-done">Implemented</span>
+          <h4>Phase 3 &mdash; Hub-Spoke Architecture</h4>
+          <p>PostgreSQL persistence for plans and audit. <strong>Flyway</strong> versioned schema migrations. Federated audit log with filtering. Hub overview API. Topology graph of all clusters and sources.</p>
         </div>
       </div>
     </div>
   </section>
 
   <section class="section">
+    <div class="container">
+      <h2>What does GateForge solve?</h2>
+      <p style="color:#6a6e73; margin-bottom:20px; max-width:800px; line-height:1.7;">
+        Organizations running <strong>Red Hat 3scale API Management</strong> need a clear, automated path to <strong>Kubernetes-native API management</strong> via Red Hat Connectivity Link (Kuadrant). Manual migration is complex: mapping 3scale Products, Backends, Mapping Rules, Application Plans, and authentication configs to Gateway API HTTPRoutes, AuthPolicies, and RateLimitPolicies requires deep expertise in both ecosystems.
+      </p>
+      <div class="card-grid" style="grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));">
+        <div class="card">
+          <h3>Discovery</h3>
+          <p>Automatically discovers 3scale Products, Backends, and ActiveDocs from multiple 3scale instances (CRDs + Admin API).</p>
+        </div>
+        <div class="card">
+          <h3>Analysis</h3>
+          <p>AI-assisted analysis of your 3scale configuration to generate equivalent Connectivity Link resources.</p>
+        </div>
+        <div class="card">
+          <h3>Multi-Cluster</h3>
+          <p>Deploy migrations to any target cluster. ArgoCD discovery, per-cluster RBAC, cluster selector in the wizard.</p>
+        </div>
+        <div class="card">
+          <h3>Persistence</h3>
+          <p>PostgreSQL-backed plans and audit. Federated logs across clusters. Hub overview with aggregated stats.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" style="background:#f5f5f5;">
     <div class="container">
       <h2>Compatibility Matrix</h2>
       <p style="color:#6a6e73; margin-bottom:16px;">GateForge has been tested with the following Red Hat product versions:</p>
@@ -212,6 +246,8 @@
           <tr><td>Red Hat 3scale API Management</td><td>2.16.x (2.16.2, 2.16.3)</td><td><span class="compat-badge compat-tested">Tested</span></td></tr>
           <tr><td>Red Hat Build of Keycloak (RHBK)</td><td>26.4.x</td><td><span class="compat-badge compat-tested">Tested</span></td></tr>
           <tr><td>Istio (Sail Operator / Service Mesh 3.x)</td><td>3.x</td><td><span class="compat-badge compat-tested">Tested</span></td></tr>
+          <tr><td>PostgreSQL (RHEL 9)</td><td>15.x</td><td><span class="compat-badge compat-tested">Tested</span></td></tr>
+          <tr><td>Flyway (Quarkus Extension)</td><td>10.x (via Quarkus BOM)</td><td><span class="compat-badge compat-tested">Tested</span></td></tr>
           <tr><td>Gateway API</td><td>v1.2.x (bundled with OpenShift)</td><td><span class="compat-badge compat-compatible">Compatible</span></td></tr>
           <tr><td>Microcks</td><td>1.10.x</td><td><span class="compat-badge compat-compatible">Compatible</span></td></tr>
           <tr><td>Red Hat Developer Hub</td><td>1.4.x</td><td><span class="compat-badge compat-compatible">Compatible</span></td></tr>
@@ -220,7 +256,7 @@
     </div>
   </section>
 
-  <section class="section" style="background: #f5f5f5;">
+  <section class="section">
     <div class="container">
       <h2>Screenshots</h2>
       <p style="color:#6a6e73; margin-bottom:16px;">Click any image to enlarge.</p>
@@ -259,155 +295,49 @@
     <span class="lightbox-close">&times;</span>
   </div>
 
-  <section class="section">
-    <div class="container">
-      <h2>Start here</h2>
-      <div class="card-grid">
-        <div class="card">
-          <h3>Installation</h3>
-          <p>Install GateForge using Helm on OpenShift or run locally with Podman Compose.</p>
-          <div class="install-block">
-            <span class="comment"># Add the Helm repo</span><br>
-            <span class="cmd">helm repo add gateforge \<br>&nbsp; https://maximilianopizarro.github.io/gateforge/</span><br><br>
-            <span class="comment"># Install</span><br>
-            <span class="cmd">helm install gateforge gateforge/gateforge</span>
-          </div>
-        </div>
-        <div class="card">
-          <h3>Local Development</h3>
-          <p>Run the full stack locally with Podman Compose for development and testing.</p>
-          <div class="install-block">
-            <span class="comment"># Clone the repo</span><br>
-            <span class="cmd">git clone https://github.com/maximilianoPizarro/gateforge.git</span><br><br>
-            <span class="comment"># Build and run</span><br>
-            <span class="cmd">podman-compose up -d --build</span>
-          </div>
-        </div>
-        <div class="card">
-          <h3>Configuration</h3>
-          <p>All parameters are configurable via Helm values: AI model, 3scale credentials, gateway strategy, and more.</p>
-          <div class="install-block">
-            <span class="cmd">helm install gateforge gateforge/gateforge \<br>
-            &nbsp; --set ai.apiKey=YOUR_KEY \<br>
-            &nbsp; --set threescale.adminApi.url=URL \<br>
-            &nbsp; --set connectivityLink.gatewayStrategy=shared</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
   <section class="section" style="background: #f5f5f5;">
-    <div class="container">
-      <h2>Using GateForge &mdash; AI Prompt Examples</h2>
-      <p style="color:#6a6e73; margin-bottom: 20px;">GateForge includes an AI-powered chat assistant that helps you analyze, plan, and execute your 3scale to Connectivity Link migration. Here are some example prompts to get started:</p>
-
-      <div class="card-grid">
-        <div class="card">
-          <h3>Discovery &amp; Analysis</h3>
-          <p><strong>Try these prompts:</strong></p>
-          <div class="install-block">
-            <span class="cmd">List all 3scale Products and Backends deployed in my cluster and show their current configuration</span>
-          </div>
-          <div class="install-block">
-            <span class="cmd">List all namespaces with 3scale resources</span>
-          </div>
-          <div class="install-block">
-            <span class="cmd">Show kuadrantctl topology</span>
-          </div>
-        </div>
-        <div class="card">
-          <h3>Migration Planning</h3>
-          <p><strong>Try these prompts:</strong></p>
-          <div class="install-block">
-            <span class="cmd">Analyze my 3scale configuration and generate a migration plan to Connectivity Link using a shared gateway strategy</span>
-          </div>
-          <div class="install-block">
-            <span class="cmd">Compare the shared, dual, and dedicated gateway strategies for my migration</span>
-          </div>
-          <div class="install-block">
-            <span class="cmd">Explain the migration steps from 3scale to Kuadrant</span>
-          </div>
-        </div>
-        <div class="card">
-          <h3>Policy Generation</h3>
-          <p><strong>Try these prompts:</strong></p>
-          <div class="install-block">
-            <span class="cmd">Generate an AuthPolicy for my API that replaces the 3scale API Key authentication with Kuadrant AuthPolicy</span>
-          </div>
-          <div class="install-block">
-            <span class="cmd">Create a RateLimitPolicy equivalent to my 3scale Application Plan that limits 100 requests per minute</span>
-          </div>
-          <div class="install-block">
-            <span class="cmd">What is a DNSPolicy in Kuadrant?</span>
-          </div>
-        </div>
-        <div class="card">
-          <h3>Route &amp; Gateway Generation</h3>
-          <p><strong>Try these prompts:</strong></p>
-          <div class="install-block">
-            <span class="cmd">Convert my 3scale mapping rules into Gateway API HTTPRoute resources with proper path matching</span>
-          </div>
-          <div class="install-block">
-            <span class="cmd">Generate Gateway YAML for istio class</span>
-          </div>
-          <div class="install-block">
-            <span class="cmd">How do I configure TLSPolicy for my migrated APIs?</span>
-          </div>
-        </div>
-      </div>
-
-      <h3 style="margin-top: 32px;">Gateway Strategy Comparison</h3>
-      <table class="arch-table">
-        <thead><tr><th>Strategy</th><th>Description</th><th>Best For</th></tr></thead>
-        <tbody>
-          <tr><td><code>shared</code></td><td>All APIs share a single Istio Gateway with multiple HTTPRoutes</td><td>Small to medium clusters, simpler management</td></tr>
-          <tr><td><code>dual</code></td><td>Two Gateways (internal/external) with APIs split by exposure level</td><td>Organizations requiring network segmentation</td></tr>
-          <tr><td><code>dedicated</code></td><td>One Gateway per 3scale Product, full isolation per API</td><td>Large enterprises, strict isolation requirements</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-  <section class="section">
     <div class="container">
       <h2>Architecture</h2>
 
       <div class="mermaid-wrapper">
-        <h3>General Architecture</h3>
+        <h3>Hub-Spoke Multi-Cluster Architecture</h3>
         <pre class="mermaid">
-graph LR
-  subgraph Frontend
-    A[Angular 18 SPA]
-    B[Red Hat Design System]
-  end
-  subgraph Backend["Backend (Quarkus 3.x)"]
-    C[REST API]
-    D[MigrationAgent AI]
-    E[MCP Servers]
-    F[kuadrantctl CLI]
-  end
-  subgraph External
-    G[OpenShift API]
-    H[3scale Admin API]
-    I[LiteLLM / LLM]
+graph TB
+  subgraph Hub["Hub Cluster (GateForge)"]
+    GF["GateForge Backend<br/>(Quarkus 3.x)"]
+    FW["Flyway<br/>Schema Migrations"]
+    PG["PostgreSQL 15<br/>Plans + Audit"]
+    FE["Angular Frontend<br/>(Nginx)"]
+    AI["LangChain4j<br/>AI Agent"]
   end
 
-  A -->|HTTP| C
-  C --> D
-  C --> E
-  C --> F
-  D -->|Tool Calling| E
-  D -->|Chat Completions| I
-  E -->|Fabric8 Client| G
-  E -->|HTTP| H
-  F -->|CLI exec| G
+  subgraph Sources["3scale Sources"]
+    S1["3scale Instance A<br/>Admin API"]
+    S2["3scale Instance B<br/>Admin API"]
+    S3["3scale CRDs<br/>In-cluster"]
+  end
 
-  style A fill:#ee0000,color:#fff
-  style D fill:#0066cc,color:#fff
-  style G fill:#151515,color:#fff
-  style H fill:#151515,color:#fff
-  style I fill:#6a3d9a,color:#fff
+  subgraph Targets["Target Clusters"]
+    T1["Local Cluster"]
+    T2["Staging Cluster"]
+    T3["Production Cluster"]
+  end
+
+  subgraph Discovery["Cluster Discovery"]
+    ARGO["ArgoCD Secrets"]
+  end
+
+  FE -->|REST API| GF
+  GF --> FW
+  FW --> PG
+  GF --> AI
+  GF -->|Admin API| S1
+  GF -->|Admin API| S2
+  GF -->|Fabric8 Client| S3
+  GF -->|apply/revert| T1
+  GF -->|apply/revert| T2
+  GF -->|apply/revert| T3
+  ARGO -->|auto-discover| GF
         </pre>
       </div>
 
@@ -415,25 +345,23 @@ graph LR
         <h3>Migration Flow</h3>
         <pre class="mermaid">
 flowchart TD
-  S1[3scale CRDs in Cluster] --> D1[ClusterService discovers CRDs]
-  S2[3scale Admin API] --> D2[ThreeScaleAdminApiClient fetches products]
-  D1 --> M[Merge Products + Backends]
+  S1["3scale CRDs"] --> D1["Discover from CRDs"]
+  S2["3scale Admin API (N sources)"] --> D2["Discover from Admin APIs"]
+  D1 --> M["Merge + Deduplicate Products"]
   D2 --> M
-  M --> OAS[Build OpenAPI 3.0 Spec per Product]
-  OAS --> KC1[kuadrantctl generate HTTPRoute]
-  OAS --> KC2[kuadrantctl generate AuthPolicy]
-  OAS --> KC3[kuadrantctl generate RateLimitPolicy]
-  KC1 --> PLAN[Migration Plan]
-  KC2 --> PLAN
-  KC3 --> PLAN
-  GW[Gateway Strategy: shared / dual / dedicated] --> PLAN
-  PLAN --> APPLY[Apply to OpenShift Cluster]
-
-  style S1 fill:#ee0000,color:#fff
-  style S2 fill:#ee0000,color:#fff
-  style OAS fill:#0066cc,color:#fff
-  style PLAN fill:#3e8635,color:#fff
-  style APPLY fill:#151515,color:#fff
+  M --> GEN["Generate Gateway API Resources"]
+  GEN --> GW["Gateway (shared/dual/dedicated)"]
+  GEN --> HR["HTTPRoute per product"]
+  GEN --> AP["AuthPolicy per product"]
+  GEN --> RL["RateLimitPolicy per product"]
+  GW --> PLAN["Migration Plan"]
+  HR --> PLAN
+  AP --> PLAN
+  RL --> PLAN
+  PLAN --> DB["Persist to PostgreSQL"]
+  PLAN --> SELECT["Select Target Cluster"]
+  SELECT --> APPLY["Apply to Target"]
+  APPLY --> AUDIT["Record in Audit Log"]
         </pre>
       </div>
 
@@ -454,7 +382,7 @@ sequenceDiagram
   LLM-->>Agent: tool_call: listThreeScaleProducts()
   Agent->>Tools: invoke listThreeScaleProducts
   Tools->>Svc: ThreeScaleService.listProducts()
-  Svc-->>Tools: Product list
+  Svc-->>Tools: Product list (all sources)
   Tools-->>Agent: Formatted product data
   Agent->>LLM: Tool result + continue
   LLM-->>Agent: Final answer with real data
@@ -479,96 +407,190 @@ sequenceDiagram
     </div>
   </section>
 
-  <section class="section" style="background:#f5f5f5;">
-    <div class="container">
-      <h2>Multi-Cluster Feasibility</h2>
-      <p style="color:#6a6e73; margin-bottom:20px; max-width:800px; line-height:1.7;">
-        GateForge currently operates as a single-cluster tool. Below is the roadmap for extending it to multi-cluster environments with multiple 3scale instances.
-      </p>
-
-      <div class="mermaid-wrapper">
-        <h3>Multi-Cluster Vision</h3>
-        <pre class="mermaid">
-graph TB
-  subgraph Hub["Hub Cluster"]
-    GF[GateForge Hub Instance]
-    ACM[ACM / ArgoCD]
-  end
-  subgraph SpokeA["Spoke Cluster A"]
-    A3[3scale v2.16]
-    AK[Kuadrant 1.3]
-  end
-  subgraph SpokeB["Spoke Cluster B"]
-    B3[3scale v2.14]
-    BK[Kuadrant 1.2]
-  end
-
-  GF -->|kubeconfig| SpokeA
-  GF -->|kubeconfig| SpokeB
-  ACM --> SpokeA
-  ACM --> SpokeB
-
-  style GF fill:#ee0000,color:#fff
-  style ACM fill:#0066cc,color:#fff
-  style A3 fill:#151515,color:#fff
-  style B3 fill:#151515,color:#fff
-        </pre>
-      </div>
-
-      <div class="phase-grid">
-        <div class="phase-card">
-          <span class="phase-badge phase-low">Low Effort</span>
-          <h4>Phase 1 &mdash; Multiple 3scale Sources</h4>
-          <p>Support N 3scale Admin API endpoints. Aggregate products from all sources with source-cluster tagging. ~2-3 days.</p>
-        </div>
-        <div class="phase-card">
-          <span class="phase-badge phase-medium">Medium Effort</span>
-          <h4>Phase 2 &mdash; Multi-Cluster Apply</h4>
-          <p>Support multiple kubeconfig entries (as Secrets). Cluster selector in migration wizard. Per-cluster RBAC validation. ~1-2 weeks.</p>
-        </div>
-        <div class="phase-card">
-          <span class="phase-badge phase-high">High Effort</span>
-          <h4>Phase 3 &mdash; Hub-Spoke Architecture</h4>
-          <p>ACM integration. Centralized migration history. Cross-cluster validation. Federation of audit logs. Longer-term roadmap.</p>
-        </div>
-      </div>
-
-      <div class="vision-section">
-        <h3>Integration Points</h3>
-        <ul style="list-style:disc; padding-left:24px; color:#6a6e73; line-height:2;">
-          <li><strong>Red Hat ACM</strong>: GateForge as a managed addon; leverage multi-cluster inventory and kubeconfig distribution</li>
-          <li><strong>ArgoCD multi-cluster</strong>: Use ArgoCD cluster Secrets for spoke discovery</li>
-          <li><strong>Kuadrant multi-cluster DNS/TLS</strong>: Kuadrant 1.3+ supports multi-cluster policies that work with GateForge-generated resources</li>
-          <li><strong>Fabric8 KubernetesClient</strong>: Already supports creating per-cluster clients from kubeconfig files</li>
-        </ul>
-      </div>
-    </div>
-  </section>
-
   <section class="section">
     <div class="container">
-      <h2>Helm Chart Values</h2>
-      <table class="arch-table">
-        <thead><tr><th>Value</th><th>Default</th><th>Description</th></tr></thead>
+      <h2>API Reference</h2>
+
+      <h3><span class="api-group-label api-group-core">Core</span> Migration &amp; Discovery</h3>
+      <table class="api-table">
+        <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
         <tbody>
-          <tr><td><code>backend.image.tag</code></td><td>latest</td><td>Backend image tag</td></tr>
-          <tr><td><code>frontend.image.tag</code></td><td>latest</td><td>Frontend image tag</td></tr>
-          <tr><td><code>ai.enabled</code></td><td>true</td><td>Enable AI features</td></tr>
-          <tr><td><code>ai.endpoint</code></td><td>litellm-prod...</td><td>LLM endpoint URL (OpenAI-compatible)</td></tr>
-          <tr><td><code>ai.model</code></td><td>deepseek-r1-distill-qwen-14b</td><td>AI model name</td></tr>
-          <tr><td><code>ai.apiKey</code></td><td>""</td><td>LLM API key</td></tr>
-          <tr><td><code>threescale.adminApi.url</code></td><td>""</td><td>3scale Admin Portal URL</td></tr>
-          <tr><td><code>threescale.adminApi.accessToken</code></td><td>""</td><td>3scale access token</td></tr>
-          <tr><td><code>connectivityLink.gatewayStrategy</code></td><td>shared</td><td>shared / dual / dedicated</td></tr>
-          <tr><td><code>connectivityLink.gatewayClassName</code></td><td>istio</td><td>Gateway class name</td></tr>
-          <tr><td><code>rbac.clusterAdmin</code></td><td>false</td><td>Use cluster-admin (dev only) vs least-privilege RBAC</td></tr>
-          <tr><td><code>route.enabled</code></td><td>true</td><td>Create OpenShift Route</td></tr>
+          <tr><td><code>/api/cluster/projects</code></td><td>GET</td><td>List all cluster projects</td></tr>
+          <tr><td><code>/api/threescale/products</code></td><td>GET</td><td>List 3scale Products (all sources)</td></tr>
+          <tr><td><code>/api/threescale/backends</code></td><td>GET</td><td>List 3scale Backends (all sources)</td></tr>
+          <tr><td><code>/api/threescale/status</code></td><td>GET</td><td>Admin API connectivity status</td></tr>
+          <tr><td><code>/api/migration/analyze</code></td><td>POST</td><td>Analyze and plan migration (with target cluster)</td></tr>
+          <tr><td><code>/api/migration/plans/{id}/apply</code></td><td>POST</td><td>Apply plan to target cluster</td></tr>
+          <tr><td><code>/api/migration/plans/{id}/revert</code></td><td>POST</td><td>Revert plan from target cluster</td></tr>
+          <tr><td><code>/api/migration/revert-bulk</code></td><td>POST</td><td>Bulk revert to 3scale</td></tr>
+          <tr><td><code>/api/audit/reports</code></td><td>GET</td><td>View audit log</td></tr>
+          <tr><td><code>/api/chat</code></td><td>POST</td><td>AI migration assistant</td></tr>
+        </tbody>
+      </table>
+
+      <h3 style="margin-top: 24px;"><span class="api-group-label api-group-p1">Phase 1</span> Multi-Source 3scale</h3>
+      <table class="api-table">
+        <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>/api/threescale/sources</code></td><td>GET</td><td>List all 3scale sources</td></tr>
+          <tr><td><code>/api/threescale/sources</code></td><td>POST</td><td>Add a new 3scale source</td></tr>
+          <tr><td><code>/api/threescale/sources/{id}</code></td><td>DELETE</td><td>Remove a source</td></tr>
+          <tr><td><code>/api/threescale/sources/{id}/status</code></td><td>GET</td><td>Check source connectivity</td></tr>
+        </tbody>
+      </table>
+
+      <h3 style="margin-top: 24px;"><span class="api-group-label api-group-p2">Phase 2</span> Multi-Cluster Targets</h3>
+      <table class="api-table">
+        <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>/api/cluster/targets</code></td><td>GET</td><td>List target clusters</td></tr>
+          <tr><td><code>/api/cluster/targets</code></td><td>POST</td><td>Add a target cluster</td></tr>
+          <tr><td><code>/api/cluster/targets/{id}</code></td><td>DELETE</td><td>Remove a target cluster</td></tr>
+          <tr><td><code>/api/cluster/targets/{id}/validate</code></td><td>GET</td><td>Validate RBAC access on target</td></tr>
+        </tbody>
+      </table>
+
+      <h3 style="margin-top: 24px;"><span class="api-group-label api-group-p3">Phase 3</span> Hub-Spoke &amp; Federated</h3>
+      <table class="api-table">
+        <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>/api/hub/overview</code></td><td>GET</td><td>Aggregated hub stats</td></tr>
+          <tr><td><code>/api/hub/audit?cluster=X&amp;action=Y</code></td><td>GET</td><td>Federated audit log with filtering</td></tr>
+          <tr><td><code>/api/hub/plans?cluster=X&amp;status=Y</code></td><td>GET</td><td>Federated plans with filtering</td></tr>
+          <tr><td><code>/api/hub/topology</code></td><td>GET</td><td>Cluster + source topology graph</td></tr>
         </tbody>
       </table>
     </div>
   </section>
 
   <section class="section" style="background: #f5f5f5;">
+    <div class="container">
+      <h2>Getting Started</h2>
+      <div class="card-grid">
+        <div class="card">
+          <h3>Helm Installation</h3>
+          <p>Install GateForge on OpenShift with PostgreSQL persistence.</p>
+          <div class="install-block">
+            <span class="comment"># Add repo</span><br>
+            <span class="cmd">helm repo add gateforge \<br>&nbsp; https://maximilianopizarro.github.io/gateforge/</span><br><br>
+            <span class="comment"># Install with persistence</span><br>
+            <span class="cmd">helm install gateforge gateforge/gateforge \<br>
+            &nbsp; --set ai.apiKey=YOUR_KEY \<br>
+            &nbsp; --set threescale.adminApi.url=URL \<br>
+            &nbsp; --set threescale.adminApi.accessToken=TOKEN</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Multi-Source Config</h3>
+          <p>Connect to multiple 3scale Admin API instances.</p>
+          <div class="install-block">
+            <span class="comment"># Via Helm values</span><br>
+            <span class="cmd">--set threescale.sources='[<br>
+            &nbsp; {"id":"prod",<br>
+            &nbsp;&nbsp; "label":"Production 3scale",<br>
+            &nbsp;&nbsp; "adminUrl":"https://...",<br>
+            &nbsp;&nbsp; "accessToken":"TOKEN",<br>
+            &nbsp;&nbsp; "enabled":true}<br>
+            ]'</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Multi-Cluster Config</h3>
+          <p>Deploy to multiple OpenShift clusters or auto-discover via ArgoCD.</p>
+          <div class="install-block">
+            <span class="comment"># ArgoCD discovery</span><br>
+            <span class="cmd">--set argocd.clusterDiscovery=true</span><br><br>
+            <span class="comment"># Or explicit clusters</span><br>
+            <span class="cmd">--set targetClusters='[<br>
+            &nbsp; {"id":"staging",<br>
+            &nbsp;&nbsp; "label":"Staging",<br>
+            &nbsp;&nbsp; "apiServerUrl":"https://...",<br>
+            &nbsp;&nbsp; "token":"TOKEN",<br>
+            &nbsp;&nbsp; "verifySsl":false,<br>
+            &nbsp;&nbsp; "enabled":true}<br>
+            ]'</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <h2>Using GateForge &mdash; AI Prompt Examples</h2>
+      <p style="color:#6a6e73; margin-bottom: 20px;">GateForge includes an AI-powered chat assistant. Here are some example prompts:</p>
+
+      <div class="card-grid">
+        <div class="card">
+          <h3>Discovery &amp; Analysis</h3>
+          <div class="install-block">
+            <span class="cmd">List all 3scale Products and Backends from all sources</span>
+          </div>
+          <div class="install-block">
+            <span class="cmd">Show kuadrantctl topology</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Migration Planning</h3>
+          <div class="install-block">
+            <span class="cmd">Analyze my 3scale configuration and generate a migration plan using shared gateway</span>
+          </div>
+          <div class="install-block">
+            <span class="cmd">Compare shared, dual, and dedicated gateway strategies</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Policy Generation</h3>
+          <div class="install-block">
+            <span class="cmd">Generate an AuthPolicy replacing 3scale API Key auth with Kuadrant AuthPolicy</span>
+          </div>
+          <div class="install-block">
+            <span class="cmd">Create a RateLimitPolicy for 100 req/min</span>
+          </div>
+        </div>
+      </div>
+
+      <h3 style="margin-top: 32px;">Gateway Strategy Comparison</h3>
+      <table class="arch-table">
+        <thead><tr><th>Strategy</th><th>Description</th><th>Best For</th></tr></thead>
+        <tbody>
+          <tr><td><code>shared</code></td><td>Single Istio Gateway with multiple HTTPRoutes</td><td>Small to medium clusters</td></tr>
+          <tr><td><code>dual</code></td><td>Two Gateways (internal/external) split by exposure</td><td>Network segmentation</td></tr>
+          <tr><td><code>dedicated</code></td><td>One Gateway per Product, full isolation</td><td>Strict isolation requirements</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="section" style="background: #f5f5f5;">
+    <div class="container">
+      <h2>Helm Chart Values</h2>
+      <table class="arch-table">
+        <thead><tr><th>Value</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>backend.image.tag</code></td><td>v0.1.7</td><td>Backend image tag</td></tr>
+          <tr><td><code>frontend.image.tag</code></td><td>v0.1.7</td><td>Frontend image tag</td></tr>
+          <tr><td><code>ai.endpoint</code></td><td>litellm-prod...</td><td>LLM endpoint URL</td></tr>
+          <tr><td><code>ai.model</code></td><td>deepseek-r1-distill-qwen-14b</td><td>AI model name</td></tr>
+          <tr><td><code>ai.apiKey</code></td><td>""</td><td>LLM API key</td></tr>
+          <tr><td><code>threescale.adminApi.url</code></td><td>""</td><td>3scale Admin Portal URL</td></tr>
+          <tr><td><code>threescale.adminApi.accessToken</code></td><td>""</td><td>3scale access token</td></tr>
+          <tr><td><code>threescale.sources</code></td><td>""</td><td>JSON array of additional 3scale sources</td></tr>
+          <tr><td><code>targetClusters</code></td><td>""</td><td>JSON array of target clusters</td></tr>
+          <tr><td><code>argocd.clusterDiscovery</code></td><td>false</td><td>Auto-discover clusters from ArgoCD</td></tr>
+          <tr><td><code>postgresql.enabled</code></td><td>true</td><td>Deploy PostgreSQL</td></tr>
+          <tr><td><code>postgresql.username</code></td><td>gateforge</td><td>DB username</td></tr>
+          <tr><td><code>postgresql.password</code></td><td>gateforge</td><td>DB password</td></tr>
+          <tr><td><code>connectivityLink.gatewayStrategy</code></td><td>shared</td><td>shared / dual / dedicated</td></tr>
+          <tr><td><code>connectivityLink.gatewayClassName</code></td><td>istio</td><td>Gateway class</td></tr>
+          <tr><td><code>rbac.clusterAdmin</code></td><td>false</td><td>Use cluster-admin vs least-privilege</td></tr>
+          <tr><td><code>route.enabled</code></td><td>true</td><td>Create OpenShift Route</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="section">
     <div class="container">
       <h2>Official Documentation</h2>
       <ul class="doc-links">
@@ -579,7 +601,6 @@ graph TB
         <li><div><a href="https://github.com/3scale/3scale-operator" target="_blank">3scale Operator CRDs</a><div class="desc">Product, Backend, APIManager custom resource definitions</div></div></li>
         <li><div><a href="https://gateway-api.sigs.k8s.io/" target="_blank">Kubernetes Gateway API</a><div class="desc">Official Gateway API specification for HTTPRoute, Gateway resources</div></div></li>
         <li><div><a href="https://quarkus.io/blog/quarkus-langchain4j-mcp/" target="_blank">Quarkus LangChain4j + MCP</a><div class="desc">Using Model Context Protocol with Quarkus and LangChain4j</div></div></li>
-        <li><div><a href="https://ux.redhat.com/" target="_blank">Red Hat Design System</a><div class="desc">Web components and design tokens for Red Hat branded experiences</div></div></li>
         <li><div><a href="https://onlu.ch/en/migration-path-from-red-hat-3scale-api-management-to-red-hat-connectivity-link/" target="_blank">Migration Guide (ONLU)</a><div class="desc">Detailed phased migration strategy from 3scale to Connectivity Link</div></div></li>
       </ul>
     </div>

@@ -2,11 +2,15 @@ package io.gateforge.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.gateforge.entity.AuditEntryEntity;
+import io.gateforge.entity.GeneratedResourceEntity;
+import io.gateforge.entity.MigrationPlanEntity;
 import io.gateforge.model.MigrationPlan;
 import io.gateforge.model.ThreeScaleProduct;
 import io.gateforge.model.AuditEntry;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
@@ -17,7 +21,6 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 @ApplicationScoped
@@ -29,7 +32,10 @@ public class MigrationService {
     ThreeScaleService threeScaleService;
 
     @Inject
-    ThreeScaleAdminApiClient adminApiClient;
+    ThreeScaleSourceRegistry sourceRegistry;
+
+    @Inject
+    ClusterRegistry clusterRegistry;
 
     @Inject
     ObjectMapper objectMapper;
@@ -49,12 +55,11 @@ public class MigrationService {
     @ConfigProperty(name = "gateforge.developer-hub.url", defaultValue = "none")
     String developerHubUrl;
 
-    private final List<AuditEntry> auditLog = new CopyOnWriteArrayList<>();
-    private final Map<String, MigrationPlan> plans = new LinkedHashMap<>();
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5)).build();
 
-    public MigrationPlan analyze(String gatewayStrategy, List<String> productNames) {
+    @Transactional
+    public MigrationPlan analyze(String gatewayStrategy, List<String> productNames, String targetClusterId) {
         List<ThreeScaleProduct> products = threeScaleService.listProducts().stream()
                 .filter(p -> productNames.isEmpty() || productNames.contains(p.name()))
                 .toList();
@@ -116,45 +121,121 @@ public class MigrationService {
         String catalogInfo = developerHubEnabled ? buildCatalogInfo(products, gatewayStrategy) : null;
 
         String planId = UUID.randomUUID().toString().substring(0, 8);
+        String effectiveClusterId = targetClusterId != null ? targetClusterId : "local";
+        io.gateforge.model.TargetCluster cluster = clusterRegistry.getCluster(effectiveClusterId);
+        String clusterLabel = cluster != null ? cluster.label() : "Local (in-cluster)";
+
         MigrationPlan plan = new MigrationPlan(
                 planId, gatewayStrategy,
                 products.stream().map(ThreeScaleProduct::name).toList(),
                 resources, "AI analysis pending", Instant.now(),
-                catalogInfo, "ACTIVE"
+                catalogInfo, "ACTIVE", effectiveClusterId, clusterLabel
         );
-        plans.put(planId, plan);
+
+        persistPlan(plan);
         return plan;
     }
 
     public List<AuditEntry> getAuditLog() {
-        return Collections.unmodifiableList(auditLog);
+        List<AuditEntryEntity> entities = AuditEntryEntity.listAll(io.quarkus.panache.common.Sort.by("timestamp").descending());
+        return entities.stream().map(this::toAuditEntry).collect(Collectors.toList());
     }
 
     public MigrationPlan getPlan(String planId) {
-        return plans.get(planId);
+        MigrationPlanEntity entity = MigrationPlanEntity.findById(planId);
+        return entity != null ? toPlan(entity) : null;
     }
 
     public List<MigrationPlan> listPlans() {
-        return new ArrayList<>(plans.values());
+        List<MigrationPlanEntity> entities = MigrationPlanEntity.listAll(io.quarkus.panache.common.Sort.by("createdAt").descending());
+        return entities.stream().map(this::toPlan).collect(Collectors.toList());
     }
 
+    @Transactional
     public void addAuditEntry(AuditEntry entry) {
-        auditLog.add(entry);
+        AuditEntryEntity e = new AuditEntryEntity();
+        e.id = entry.id();
+        e.timestamp = entry.timestamp();
+        e.action = entry.action();
+        e.resourceKind = entry.resourceKind();
+        e.resourceName = entry.resourceName();
+        e.namespace = entry.namespace();
+        e.yamlBefore = entry.yamlBefore();
+        e.yamlAfter = entry.yamlAfter();
+        e.performedBy = entry.performedBy();
+        e.targetClusterId = entry.targetClusterId();
+        e.persist();
     }
 
+    @Transactional
     public void updatePlanStatus(String planId, String status) {
-        MigrationPlan existing = plans.get(planId);
-        if (existing != null) {
-            plans.put(planId, new MigrationPlan(
-                    existing.id(), existing.gatewayStrategy(), existing.sourceProducts(),
-                    existing.resources(), existing.aiAnalysis(), existing.createdAt(),
-                    existing.catalogInfoYaml(), status
-            ));
+        MigrationPlanEntity entity = MigrationPlanEntity.findById(planId);
+        if (entity != null) {
+            entity.status = status;
+            entity.persist();
         }
     }
 
+    @Transactional
+    void persistPlan(MigrationPlan plan) {
+        MigrationPlanEntity entity = new MigrationPlanEntity();
+        entity.id = plan.id();
+        entity.gatewayStrategy = plan.gatewayStrategy();
+        try {
+            entity.sourceProductsJson = objectMapper.writeValueAsString(plan.sourceProducts());
+        } catch (Exception e) {
+            entity.sourceProductsJson = "[]";
+        }
+        entity.aiAnalysis = plan.aiAnalysis();
+        entity.createdAt = plan.createdAt();
+        entity.catalogInfoYaml = plan.catalogInfoYaml();
+        entity.status = plan.status();
+        entity.targetClusterId = plan.targetClusterId();
+        entity.targetClusterLabel = plan.targetClusterLabel();
+
+        List<GeneratedResourceEntity> resourceEntities = new ArrayList<>();
+        for (MigrationPlan.GeneratedResource r : plan.resources()) {
+            GeneratedResourceEntity re = new GeneratedResourceEntity();
+            re.kind = r.kind();
+            re.name = r.name();
+            re.namespace = r.namespace();
+            re.yaml = r.yaml();
+            re.plan = entity;
+            resourceEntities.add(re);
+        }
+        entity.resources = resourceEntities;
+        entity.persist();
+    }
+
+    private MigrationPlan toPlan(MigrationPlanEntity e) {
+        List<String> products;
+        try {
+            products = objectMapper.readValue(e.sourceProductsJson,
+                    objectMapper.getTypeFactory().constructCollectionType(List.class, String.class));
+        } catch (Exception ex) {
+            products = List.of();
+        }
+        List<MigrationPlan.GeneratedResource> resources = e.resources != null
+                ? e.resources.stream()
+                    .map(r -> new MigrationPlan.GeneratedResource(r.kind, r.name, r.namespace, r.yaml))
+                    .collect(Collectors.toList())
+                : List.of();
+        return new MigrationPlan(
+                e.id, e.gatewayStrategy, products, resources,
+                e.aiAnalysis, e.createdAt, e.catalogInfoYaml, e.status,
+                e.targetClusterId, e.targetClusterLabel
+        );
+    }
+
+    private AuditEntry toAuditEntry(AuditEntryEntity e) {
+        return new AuditEntry(
+                e.id, e.timestamp, e.action, e.resourceKind, e.resourceName,
+                e.namespace, e.yamlBefore, e.yamlAfter, e.performedBy, e.targetClusterId
+        );
+    }
+
     public List<Map<String, String>> generateTestCommands(String planId) {
-        MigrationPlan plan = plans.get(planId);
+        MigrationPlan plan = getPlan(planId);
         if (plan == null) return List.of();
 
         List<Map<String, String>> commands = new ArrayList<>();
@@ -499,25 +580,29 @@ public class MigrationService {
     private BackendIndex resolveBackendEndpoints() {
         Map<Long, String> byId = new HashMap<>();
         Map<String, String> byName = new HashMap<>();
-        if (!adminApiClient.isConfigured()) return new BackendIndex(byId, byName);
-        try {
-            List<Map<String, Object>> backends = adminApiClient.listBackendApis();
-            for (Map<String, Object> b : backends) {
-                String ep = String.valueOf(b.getOrDefault("private_endpoint", ""));
-                if (ep.isBlank()) continue;
+        if (!sourceRegistry.hasConfiguredClients()) return new BackendIndex(byId, byName);
 
-                Object idObj = b.get("id");
-                long id = idObj instanceof Number n ? n.longValue() : 0L;
-                if (id > 0) byId.put(id, ep);
+        for (ThreeScaleAdminApiClient client : sourceRegistry.getAllClients()) {
+            if (!client.isConfigured()) continue;
+            try {
+                List<Map<String, Object>> backends = client.listBackendApis();
+                for (Map<String, Object> b : backends) {
+                    String ep = String.valueOf(b.getOrDefault("private_endpoint", ""));
+                    if (ep.isBlank()) continue;
 
-                String sysName = String.valueOf(b.getOrDefault("system_name", ""));
-                if (!sysName.isBlank()) byName.put(sysName, ep);
+                    Object idObj = b.get("id");
+                    long id = idObj instanceof Number n ? n.longValue() : 0L;
+                    if (id > 0) byId.put(id, ep);
 
-                String name = String.valueOf(b.getOrDefault("name", ""));
-                if (!name.isBlank()) byName.put(name, ep);
+                    String sysName = String.valueOf(b.getOrDefault("system_name", ""));
+                    if (!sysName.isBlank()) byName.put(sysName, ep);
+
+                    String name = String.valueOf(b.getOrDefault("name", ""));
+                    if (!name.isBlank()) byName.put(name, ep);
+                }
+            } catch (Exception e) {
+                LOG.warnf("Failed to resolve backend endpoints for source %s", client.getSourceId());
             }
-        } catch (Exception e) {
-            LOG.warn("Failed to resolve backend endpoints", e);
         }
         return new BackendIndex(byId, byName);
     }

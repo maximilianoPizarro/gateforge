@@ -23,6 +23,25 @@ export interface ThreeScaleProduct {
   source: string;
   backendNamespace?: string;
   backendServiceName?: string;
+  sourceCluster?: string;
+}
+
+export interface ThreeScaleSource {
+  id: string;
+  label: string;
+  adminUrl: string;
+  accessToken: string;
+  enabled: boolean;
+}
+
+export interface TargetCluster {
+  id: string;
+  label: string;
+  apiServerUrl: string;
+  token: string;
+  authType: string;
+  verifySsl: boolean;
+  enabled: boolean;
 }
 
 export interface ThreeScaleBackend {
@@ -64,6 +83,8 @@ export interface MigrationPlan {
   createdAt: string;
   catalogInfoYaml?: string;
   status?: string;
+  targetClusterId?: string;
+  targetClusterLabel?: string;
 }
 
 export interface BulkRevertResult {
@@ -89,6 +110,7 @@ export interface AuditEntry {
   yamlBefore: string;
   yamlAfter: string;
   performedBy: string;
+  targetClusterId?: string;
 }
 
 export interface ChatMessage {
@@ -146,9 +168,9 @@ export class ApiService {
     return this.http.get<ThreeScaleStatus>(`${this.baseUrl}/threescale/status`);
   }
 
-  analyzeMigration(gatewayStrategy: string, products: string[]): Observable<MigrationPlan> {
+  analyzeMigration(gatewayStrategy: string, products: string[], targetClusterId?: string): Observable<MigrationPlan> {
     return this.http.post<MigrationPlan>(`${this.baseUrl}/migration/analyze`, {
-      gatewayStrategy, products
+      gatewayStrategy, products, targetClusterId: targetClusterId || 'local'
     });
   }
 
@@ -184,5 +206,33 @@ export class ApiService {
 
   getFeatures(): Observable<FeatureFlags> {
     return this.http.get<FeatureFlags>(`${this.baseUrl}/cluster/features`);
+  }
+
+  getSources(): Observable<ThreeScaleSource[]> {
+    return this.http.get<ThreeScaleSource[]>(`${this.baseUrl}/threescale/sources`);
+  }
+
+  addSource(source: ThreeScaleSource): Observable<ThreeScaleSource> {
+    return this.http.post<ThreeScaleSource>(`${this.baseUrl}/threescale/sources`, source);
+  }
+
+  removeSource(id: string): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/threescale/sources/${id}`);
+  }
+
+  getTargetClusters(): Observable<TargetCluster[]> {
+    return this.http.get<TargetCluster[]>(`${this.baseUrl}/cluster/targets`);
+  }
+
+  addTargetCluster(cluster: TargetCluster): Observable<TargetCluster> {
+    return this.http.post<TargetCluster>(`${this.baseUrl}/cluster/targets`, cluster);
+  }
+
+  removeTargetCluster(id: string): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/cluster/targets/${id}`);
+  }
+
+  validateTargetCluster(id: string): Observable<Record<string, unknown>> {
+    return this.http.get<Record<string, unknown>>(`${this.baseUrl}/cluster/targets/${id}/validate`);
   }
 }

@@ -45,6 +45,7 @@ threescale:
   crdDiscovery:
     enabled: true
     namespace: ""
+  sources: ""
 
 clusterDomain: apps.cluster.example.com
 
@@ -59,6 +60,16 @@ connectivityLink:
 
 kuadrantctl:
   enabled: true
+
+targetClusters: ""
+argocd:
+  clusterDiscovery: false
+
+postgresql:
+  enabled: true
+  url: ""
+  username: gateforge
+  password: gateforge
 
 rbac:
   clusterAdmin: false

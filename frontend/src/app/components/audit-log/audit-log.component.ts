@@ -66,6 +66,7 @@ import { ApiService, AuditEntry } from '../../services/api.service';
             <div class="meta-row">
               <span class="meta-pill">Namespace: {{ entry.namespace }}</span>
               <span class="meta-pill">By: {{ entry.performedBy }}</span>
+              <span class="meta-pill meta-cluster" *ngIf="entry.targetClusterId && entry.targetClusterId !== 'local'">Cluster: {{ entry.targetClusterId }}</span>
             </div>
             <button
               type="button"
@@ -270,6 +271,7 @@ import { ApiService, AuditEntry } from '../../services/api.service';
       font-size: 0.82rem;
     }
     .muted { color: #6a6e73; font-size: 0.88rem; margin: 0; }
+    .meta-cluster { background: #e8eaf6; border-color: #3f51b5; color: #283593; }
     .empty-state {
       text-align: center;
       padding: 48px 28px;
