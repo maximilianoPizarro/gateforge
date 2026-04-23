@@ -6,6 +6,7 @@ import io.gateforge.model.ChatMessage;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 import org.jboss.logging.Logger;
 
 @Path("/api/chat")
@@ -22,11 +23,36 @@ public class ChatResource {
     GateForgeTools tools;
 
     @POST
-    public ChatMessage chat(ChatMessage userMessage) {
-        String contextEnriched = buildContextMessage(userMessage.content());
-        String response = migrationAgent.chat(contextEnriched);
-        response = cleanThinkingBlocks(response);
-        return new ChatMessage("assistant", response);
+    public Response chat(ChatMessage userMessage) {
+        try {
+            String contextEnriched = buildContextMessage(userMessage.content());
+            String response = migrationAgent.chat(contextEnriched);
+            response = cleanThinkingBlocks(response);
+            return Response.ok(new ChatMessage("assistant", response)).build();
+        } catch (Exception e) {
+            LOG.error("AI chat failed", e);
+            String errorMsg = extractUserFriendlyError(e);
+            return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                    .entity(new ChatMessage("error", errorMsg))
+                    .build();
+        }
+    }
+
+    private String extractUserFriendlyError(Exception e) {
+        String msg = e.getMessage() != null ? e.getMessage() : "";
+        Throwable cause = e.getCause();
+        String causeMsg = cause != null && cause.getMessage() != null ? cause.getMessage() : "";
+
+        if (msg.contains("401") || causeMsg.contains("401") || causeMsg.contains("auth_error")) {
+            return "AI service authentication failed. The API key is invalid or not configured. Please contact the administrator.";
+        }
+        if (msg.contains("timeout") || msg.contains("Timeout") || causeMsg.contains("timeout")) {
+            return "AI service timed out. The model is taking too long to respond. Please try again with a simpler question.";
+        }
+        if (msg.contains("Connection refused") || causeMsg.contains("Connection refused")) {
+            return "Cannot reach the AI service. Please verify the AI endpoint configuration.";
+        }
+        return "AI service is temporarily unavailable. Please try again later. (" + (causeMsg.isEmpty() ? msg : causeMsg) + ")";
     }
 
     private String cleanThinkingBlocks(String text) {

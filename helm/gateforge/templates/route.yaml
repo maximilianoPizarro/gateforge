@@ -6,7 +6,7 @@ metadata:
   labels:
     {{- include "gateforge.labels" . | nindent 4 }}
   annotations:
-    haproxy.router.openshift.io/timeout: "120s"
+    haproxy.router.openshift.io/timeout: "300s"
 spec:
   {{- if .Values.route.host }}
   host: {{ .Values.route.host }}
