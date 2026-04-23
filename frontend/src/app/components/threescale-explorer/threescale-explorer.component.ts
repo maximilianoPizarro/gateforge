@@ -536,7 +536,7 @@ export class ThreeScaleExplorerComponent implements OnInit {
     this.expandedKey = this.expandedKey === key ? null : key;
   }
 
-  trackByName(_: number, p: ThreeScaleProduct): string { return this.productKey(p); }
+  trackByName = (_: number, p: ThreeScaleProduct): string => this.productKey(p);
 
   hasAuth(product: ThreeScaleProduct): boolean {
     return product.authentication != null && Object.keys(product.authentication).length > 0;
