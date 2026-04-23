@@ -1,14 +1,21 @@
 package io.gateforge.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.dsl.base.CustomResourceDefinitionContext;
 import io.gateforge.model.ThreeScaleProduct;
+import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.infinispan.client.hotrod.RemoteCache;
+import org.infinispan.client.hotrod.RemoteCacheManager;
 
 import java.util.*;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
@@ -17,6 +24,16 @@ import java.util.stream.Collectors;
 public class ThreeScaleService {
 
     private static final Logger LOG = Logger.getLogger(ThreeScaleService.class.getName());
+    private static final String PRODUCTS_CACHE = "threescale-products";
+    private static final String BACKENDS_CACHE = "threescale-backends";
+    private static final String CACHE_KEY = "all";
+
+    private final ReentrantLock productsLock = new ReentrantLock();
+    private final ReentrantLock backendsLock = new ReentrantLock();
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Inject
+    RemoteCacheManager cacheManager;
 
     @Inject
     KubernetesClient kubernetesClient;
@@ -26,6 +43,9 @@ public class ThreeScaleService {
 
     @ConfigProperty(name = "gateforge.threescale.crd-discovery", defaultValue = "true")
     boolean crdDiscoveryEnabled;
+
+    @ConfigProperty(name = "gateforge.cache.ttl-seconds", defaultValue = "300")
+    long cacheTtlSeconds;
 
     private static final CustomResourceDefinitionContext PRODUCT_CTX = new CustomResourceDefinitionContext.Builder()
             .withGroup("capabilities.3scale.net")
@@ -42,6 +62,43 @@ public class ThreeScaleService {
             .build();
 
     public List<ThreeScaleProduct> listProducts() {
+        try {
+            RemoteCache<String, String> cache = cacheManager.getCache(PRODUCTS_CACHE);
+            if (cache != null) {
+                String cached = cache.get(CACHE_KEY);
+                if (cached != null) {
+                    LOG.info("Products served from Data Grid cache");
+                    return objectMapper.readValue(cached, new TypeReference<List<ThreeScaleProduct>>() {});
+                }
+            }
+        } catch (Exception e) {
+            LOG.log(Level.WARNING, "Data Grid cache read failed, loading from source", e);
+        }
+
+        productsLock.lock();
+        try {
+            long start = System.currentTimeMillis();
+            List<ThreeScaleProduct> result = loadProducts();
+            long elapsed = System.currentTimeMillis() - start;
+            LOG.info("Loaded %d products in %dms from source".formatted(result.size(), elapsed));
+
+            try {
+                RemoteCache<String, String> cache = cacheManager.getCache(PRODUCTS_CACHE);
+                if (cache != null) {
+                    cache.put(CACHE_KEY, objectMapper.writeValueAsString(result), cacheTtlSeconds, TimeUnit.SECONDS);
+                    LOG.info("Products cached in Data Grid (TTL %ds)".formatted(cacheTtlSeconds));
+                }
+            } catch (Exception e) {
+                LOG.log(Level.WARNING, "Data Grid cache write failed", e);
+            }
+
+            return result;
+        } finally {
+            productsLock.unlock();
+        }
+    }
+
+    private List<ThreeScaleProduct> loadProducts() {
         Map<String, ThreeScaleProduct> crdProducts = new LinkedHashMap<>();
         Map<String, ThreeScaleProduct> apiProducts = new LinkedHashMap<>();
 
@@ -107,6 +164,43 @@ public class ThreeScaleService {
     }
 
     public List<Map<String, Object>> listBackendsCombined() {
+        try {
+            RemoteCache<String, String> cache = cacheManager.getCache(BACKENDS_CACHE);
+            if (cache != null) {
+                String cached = cache.get(CACHE_KEY);
+                if (cached != null) {
+                    LOG.info("Backends served from Data Grid cache");
+                    return objectMapper.readValue(cached, new TypeReference<List<Map<String, Object>>>() {});
+                }
+            }
+        } catch (Exception e) {
+            LOG.log(Level.WARNING, "Data Grid cache read failed for backends, loading from source", e);
+        }
+
+        backendsLock.lock();
+        try {
+            long start = System.currentTimeMillis();
+            List<Map<String, Object>> result = loadBackendsCombined();
+            long elapsed = System.currentTimeMillis() - start;
+            LOG.info("Loaded %d backends in %dms from source".formatted(result.size(), elapsed));
+
+            try {
+                RemoteCache<String, String> cache = cacheManager.getCache(BACKENDS_CACHE);
+                if (cache != null) {
+                    cache.put(CACHE_KEY, objectMapper.writeValueAsString(result), cacheTtlSeconds, TimeUnit.SECONDS);
+                    LOG.info("Backends cached in Data Grid (TTL %ds)".formatted(cacheTtlSeconds));
+                }
+            } catch (Exception e) {
+                LOG.log(Level.WARNING, "Data Grid cache write failed for backends", e);
+            }
+
+            return result;
+        } finally {
+            backendsLock.unlock();
+        }
+    }
+
+    private List<Map<String, Object>> loadBackendsCombined() {
         List<Map<String, Object>> backends = new ArrayList<>();
 
         if (crdDiscoveryEnabled) {

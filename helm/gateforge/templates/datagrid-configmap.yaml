@@ -1,0 +1,61 @@
+{{- if .Values.datagrid.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "gateforge.datagrid" . }}-config
+  labels:
+    {{- include "gateforge.datagridLabels" . | nindent 4 }}
+data:
+  infinispan.xml: |
+    <infinispan
+        xmlns="urn:infinispan:config:15.0"
+        xmlns:server="urn:infinispan:server:15.0">
+
+      <cache-container name="default" statistics="true">
+        <transport cluster="${infinispan.cluster.name:gateforge-cache}"
+                   stack="${infinispan.cluster.stack:kubernetes}"
+                   node-name="${infinispan.node.name:}"/>
+        <security>
+          <authorization/>
+        </security>
+
+        <distributed-cache name="threescale-products" mode="SYNC" owners="1">
+          <encoding media-type="text/plain"/>
+        </distributed-cache>
+        <distributed-cache name="threescale-backends" mode="SYNC" owners="1">
+          <encoding media-type="text/plain"/>
+        </distributed-cache>
+      </cache-container>
+
+      <server xmlns="urn:infinispan:server:15.0">
+        <interfaces>
+          <interface name="public">
+            <inet-address value="${infinispan.bind.address:0.0.0.0}"/>
+          </interface>
+        </interfaces>
+
+        <socket-bindings default-interface="public"
+                         port-offset="${infinispan.socket.binding.port-offset:0}">
+          <socket-binding name="default" port="11222"/>
+        </socket-bindings>
+
+        <security>
+          <credential-stores>
+            <credential-store name="credentials" path="credentials.pfx">
+              <clear-text-credential clear-text="secret"/>
+            </credential-store>
+          </credential-stores>
+          <security-realms>
+            <security-realm name="default">
+              <properties-realm groups-attribute="Roles">
+                <user-properties path="users.properties"/>
+                <group-properties path="groups.properties"/>
+              </properties-realm>
+            </security-realm>
+          </security-realms>
+        </security>
+
+        <endpoints socket-binding="default" security-realm="default"/>
+      </server>
+    </infinispan>
+{{- end }}

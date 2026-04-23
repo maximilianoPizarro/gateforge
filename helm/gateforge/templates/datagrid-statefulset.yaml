@@ -1,0 +1,92 @@
+{{- if .Values.datagrid.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "gateforge.datagrid" . }}
+  labels:
+    {{- include "gateforge.datagridLabels" . | nindent 4 }}
+    app.openshift.io/runtime: infinispan
+  annotations:
+    app.openshift.io/runtime: infinispan
+spec:
+  serviceName: {{ include "gateforge.datagridHeadless" . }}
+  replicas: {{ .Values.datagrid.replicas }}
+  selector:
+    matchLabels:
+      {{- include "gateforge.datagridSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "gateforge.datagridSelectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/datagrid-configmap.yaml") . | sha256sum }}
+    spec:
+      containers:
+        - name: infinispan
+          image: {{ .Values.datagrid.image.repository }}:{{ .Values.datagrid.image.tag }}
+          imagePullPolicy: {{ .Values.datagrid.image.pullPolicy | default "IfNotPresent" }}
+          args:
+            - -c
+            - /opt/infinispan/server/conf/custom/infinispan.xml
+            - --bind-address=0.0.0.0
+          env:
+            - name: USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "gateforge.datagrid" . }}-secret
+                  key: DATAGRID_USERNAME
+            - name: PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "gateforge.datagrid" . }}-secret
+                  key: DATAGRID_PASSWORD
+            - name: JAVA_OPTIONS
+              value: >-
+                -Djgroups.dns.query={{ include "gateforge.datagridDnsQuery" . }}
+                -Dinfinispan.cluster.name=gateforge-cache
+                -Dinfinispan.cluster.stack=kubernetes
+          ports:
+            - name: hotrod
+              containerPort: 11222
+              protocol: TCP
+            - name: jgroups
+              containerPort: {{ .Values.datagrid.jgroups.port }}
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /rest/v2/cache-managers/default/health/status
+              port: hotrod
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /rest/v2/cache-managers/default/health/status
+              port: hotrod
+            initialDelaySeconds: 40
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.datagrid.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /opt/infinispan/server/conf/custom
+            - name: data
+              mountPath: /opt/infinispan/server/data
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "gateforge.datagrid" . }}-config
+        {{- if not .Values.datagrid.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
+  {{- if .Values.datagrid.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.datagrid.persistence.size }}
+  {{- end }}
+{{- end }}

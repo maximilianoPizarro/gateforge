@@ -70,6 +70,22 @@ spec:
                 secretKeyRef:
                   name: {{ include "gateforge.fullname" . }}-config
                   key: DATASOURCE_PASSWORD
+            {{- if .Values.datagrid.enabled }}
+            - name: DATAGRID_HOST
+              value: {{ include "gateforge.datagrid" . }}
+            - name: DATAGRID_PORT
+              value: "11222"
+            - name: DATAGRID_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "gateforge.datagrid" . }}-secret
+                  key: DATAGRID_USERNAME
+            - name: DATAGRID_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "gateforge.datagrid" . }}-secret
+                  key: DATAGRID_PASSWORD
+            {{- end }}
           resources:
             {{- toYaml .Values.backend.resources | nindent 12 }}
           readinessProbe:

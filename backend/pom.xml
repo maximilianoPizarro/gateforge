@@ -98,6 +98,12 @@
             <artifactId>quarkus-flyway</artifactId>
         </dependency>
 
+        <!-- Infinispan / Data Grid remote cache -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-infinispan-client</artifactId>
+        </dependency>
+
         <!-- Test -->
         <dependency>
             <groupId>io.quarkus</groupId>

@@ -1,0 +1,23 @@
+{{- if .Values.datagrid.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "gateforge.datagridHeadless" . }}
+  labels:
+    {{- include "gateforge.datagridLabels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - port: 11222
+      targetPort: hotrod
+      protocol: TCP
+      name: hotrod
+    - port: {{ .Values.datagrid.jgroups.port }}
+      targetPort: jgroups
+      protocol: TCP
+      name: jgroups
+  selector:
+    {{- include "gateforge.datagridSelectorLabels" . | nindent 4 }}
+{{- end }}
