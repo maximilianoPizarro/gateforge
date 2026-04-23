@@ -10,6 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@400;600;700&family=Red+Hat+Text:wght@400;500;600&family=Red+Hat+Mono&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { zoom: 1.5; }
     body { font-family: 'Red Hat Text', sans-serif; color: #151515; line-height: 1.6; }
     a { color: #06c; text-decoration: none; }
     a:hover { text-decoration: underline; }
@@ -83,9 +84,18 @@
 
     code { background: #e8e8e8; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
 
-    .mermaid-wrapper { background: #fff; border: 1px solid #d2d2d2; border-radius: 8px; padding: 24px; margin: 24px 0; overflow-x: auto; }
+    .mermaid-wrapper { background: #fff; border: 1px solid #d2d2d2; border-radius: 8px; padding: 24px; margin: 24px 0; overflow-x: auto; cursor: zoom-in; position: relative; transition: box-shadow 0.2s; }
+    .mermaid-wrapper:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.12); }
     .mermaid-wrapper h3 { margin-bottom: 16px; color: #151515; }
+    .mermaid-wrapper .zoom-hint-diagram {
+      position: absolute; top: 12px; right: 16px; background: rgba(0,0,0,0.6);
+      color: white; padding: 4px 12px; border-radius: 4px; font-size: 0.75rem;
+      opacity: 0; transition: opacity 0.2s; pointer-events: none;
+    }
+    .mermaid-wrapper:hover .zoom-hint-diagram { opacity: 1; }
     .mermaid { text-align: center; }
+    .unified-arch { border: 2px solid #ee0000; background: linear-gradient(135deg, #fff 0%, #fef7f7 100%); }
+    .unified-arch h3 { color: #ee0000; font-size: 1.3rem; }
 
     .compat-table { width: 100%; border-collapse: collapse; margin: 16px 0; }
     .compat-table th, .compat-table td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #d2d2d2; }
@@ -229,7 +239,7 @@
         <div class="phase-card">
           <span class="phase-badge" style="background:#fff3e0;color:#e65100;">kuadrantctl</span>
           <h4>kuadrantctl-Powered Generation</h4>
-          <p>Generates HTTPRoute, AuthPolicy, and RateLimitPolicy using <code>kuadrantctl</code> from real or synthetic OpenAPI specs built from 3scale mapping rules.</p>
+          <p>Generates HTTPRoute, AuthPolicy, and RateLimitPolicy using <code>kuadrantctl</code> from real or synthetic OpenAPI specs. Auto-consolidates rules exceeding Gateway API 16-rule limit into prefix-based matches.</p>
         </div>
         <div class="phase-card">
           <span class="phase-badge" style="background:#fce4ec;color:#880e4f;">AI Verification</span>
@@ -361,70 +371,138 @@
     <div class="container">
       <h2>Architecture</h2>
 
-      <div class="mermaid-wrapper">
-        <h3>Hub-Spoke Multi-Cluster Architecture</h3>
+      <div class="mermaid-wrapper unified-arch" onclick="openMermaidLightbox(this)">
+        <h3>GateForge &mdash; Unified Solution Architecture</h3>
+        <span class="zoom-hint-diagram">Click to enlarge</span>
         <pre class="mermaid">
 graph TB
-  subgraph Hub["Hub Cluster (GateForge)"]
-    GF["GateForge Backend<br/>(Quarkus 3.x)"]
-    FW["Flyway<br/>Schema Migrations"]
-    PG["PostgreSQL 15<br/>Plans + Audit"]
-    FE["Angular Frontend<br/>(Nginx)"]
-    AI["LangChain4j<br/>AI Agent"]
+  subgraph OCP["OpenShift Container Platform 4.20+"]
+    direction TB
+
+    subgraph gf["GateForge Platform"]
+      FE["Frontend\nAngular 18 + Red Hat Design System"]
+      BE["Backend\nQuarkus 3.x / Java 17"]
+      PG[("PostgreSQL 15\n+ Flyway Migrations")]
+      DG["Red Hat Data Grid\nInfinispan 15.x\nHot Rod Protocol"]
+      DHPLUGIN["GateForge DevHub Plugin\nExpress.js / Node.js"]
+    end
+
+    subgraph aieng["AI Engine"]
+      LC4J["LangChain4j\nMCP Tool Calling"]
+      LITELLM["LiteLLM Gateway\nDeepSeek R1 14B"]
+    end
+
+    subgraph source["Red Hat 3scale API Management 2.16"]
+      ADM["Admin API\nProducts - Backends - Plans - Credentials"]
+      CRD3S["3scale Operator CRDs\ncapabilities.3scale.net"]
+    end
+
+    KCTL["kuadrantctl 0.10\nOpenAPI-to-Gateway API"]
+
+    subgraph target["Red Hat Connectivity Link 1.3 / Kuadrant"]
+      subgraph gwapi["Gateway API v1.2"]
+        GW["Gateway\nIstio class"]
+        HR["HTTPRoute\nmax 16 rules"]
+      end
+      subgraph kpol["Kuadrant Policies"]
+        AP["AuthPolicy"]
+        RLP["RateLimitPolicy"]
+      end
+      subgraph cl13["Connectivity Link 1.3 CRDs"]
+        APROD["APIProduct\ndevportal.kuadrant.io"]
+        PP["PlanPolicy\nextensions.kuadrant.io"]
+        AK["APIKey\ndevportal.kuadrant.io"]
+        TP["TelemetryPolicy\nextensions.kuadrant.io"]
+      end
+    end
+
+    subgraph platform["Platform Services"]
+      IST["Istio / Service Mesh 3.x\nSail Operator"]
+      RHBK["Red Hat Build of Keycloak\nRHBK 26.4.x"]
+      RHDH["Red Hat Developer Hub 1.9\n+ 3scale Auto-Discovery Plugin"]
+      ARGO["ArgoCD\nCluster Discovery + GitOps"]
+      MCK["Microcks 1.10\nAPI Mocking"]
+    end
+
+    subgraph obs["Observability - Optional"]
+      OTEL["OpenTelemetry\nOperator + Collector"]
+      PROM["Prometheus\nServiceMonitor"]
+      GRAF["Grafana\nDashboard"]
+    end
   end
 
-  subgraph Sources["3scale Sources"]
-    S1["3scale Instance A<br/>Admin API"]
-    S2["3scale Instance B<br/>Admin API"]
-    S3["3scale CRDs<br/>In-cluster"]
-  end
+  HELM["Helm Chart\nArtifact Hub"]
 
-  subgraph Targets["Target Clusters"]
-    T1["Local Cluster"]
-    T2["Staging Cluster"]
-    T3["Production Cluster"]
-  end
+  FE -->|REST API| BE
+  BE --> PG
+  BE -->|FAQ + Products cache| DG
+  BE --> LC4J
+  LC4J --> LITELLM
+  BE -->|discover products| ADM
+  BE -->|Fabric8 Client| CRD3S
+  BE -->|OpenAPI spec| KCTL
+  KCTL -.->|generate| HR
+  KCTL -.->|generate| AP
+  KCTL -.->|generate| RLP
+  BE ==>|apply CRDs| GW
+  BE ==>|apply CRDs| HR
+  BE ==>|apply CRDs| AP
+  BE ==>|apply CRDs| RLP
+  BE ==>|apply CRDs| APROD
+  BE ==>|apply CRDs| PP
+  BE ==>|apply CRDs| AK
+  BE ==>|apply CRDs| TP
+  IST --> GW
+  AP -.->|auth delegation| RHBK
+  BE -->|migration webhook| DHPLUGIN
+  DHPLUGIN --> RHDH
+  ARGO -->|cluster secrets| BE
+  MCK -.->|mock backends| HR
+  BE -.->|Micrometer metrics| OTEL
+  OTEL --> PROM
+  PROM --> GRAF
+  HELM -.->|deploy| gf
 
-  subgraph Discovery["Cluster Discovery"]
-    ARGO["ArgoCD Secrets"]
-  end
-
-  FE -->|REST API| GF
-  GF --> FW
-  FW --> PG
-  GF --> AI
-  GF -->|Admin API| S1
-  GF -->|Admin API| S2
-  GF -->|Fabric8 Client| S3
-  GF -->|apply/revert| T1
-  GF -->|apply/revert| T2
-  GF -->|apply/revert| T3
-  ARGO -->|auto-discover| GF
+  style gf fill:#fce4ec,stroke:#c62828,stroke-width:2px
+  style target fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+  style source fill:#fff3e0,stroke:#e65100,stroke-width:2px
+  style aieng fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+  style platform fill:#f3e5f5,stroke:#6a1b9a,stroke-width:1px
+  style obs fill:#fafafa,stroke:#9e9e9e,stroke-width:1px,stroke-dasharray: 5 5
+  style cl13 fill:#c8e6c9,stroke:#388e3c,stroke-width:1px
+  style gwapi fill:#dcedc8,stroke:#558b2f,stroke-width:1px
+  style kpol fill:#dcedc8,stroke:#558b2f,stroke-width:1px
+  style OCP fill:#fafafa,stroke:#212121,stroke-width:3px
         </pre>
       </div>
 
-      <div class="mermaid-wrapper">
+      <div class="mermaid-wrapper" onclick="openMermaidLightbox(this)">
         <h3>Migration Pipeline (kuadrantctl + AI Verification)</h3>
+        <span class="zoom-hint-diagram">Click to enlarge</span>
         <pre class="mermaid">
 flowchart TD
-  Analyze["POST /api/migration/analyze"] --> FetchOAS{"Fetch OpenAPI from backend?"}
-  FetchOAS -->|Found| KuadrantCtl["kuadrantctl generate httproute/authpolicy/ratelimitpolicy --oas"]
-  FetchOAS -->|Not found| BuildOAS["Build synthetic OpenAPI from 3scale mapping rules"]
+  Analyze["POST /api/migration/analyze"] --> FetchOAS{"Fetch OpenAPI\nfrom backend?"}
+  FetchOAS -->|Found| KuadrantCtl["kuadrantctl generate\nhttproute / authpolicy / ratelimitpolicy"]
+  FetchOAS -->|Not found| BuildOAS["Build synthetic OpenAPI\nfrom 3scale mapping rules"]
   BuildOAS --> KuadrantCtl
-  KuadrantCtl -->|Success| PostProcess["Post-process: set namespace, gateway, labels"]
-  KuadrantCtl -->|Fail| Fallback["Fallback: improved Java templates"]
-  PostProcess --> AIVerify["MigrationAgent: verify & suggest improvements"]
+  KuadrantCtl -->|Success| PostProcess["Post-process: namespace,\ngateway, labels"]
+  KuadrantCtl -->|Fail| Fallback["Fallback:\nimproved Java templates"]
+  PostProcess --> Consolidate{"Rules > 16?"}
+  Consolidate -->|Yes| Merge["Consolidate to\nPathPrefix matches"]
+  Consolidate -->|No| AIVerify
+  Merge --> AIVerify["MigrationAgent:\nverify &amp; recommend"]
   Fallback --> AIVerify
-  AIVerify --> Plan["Store plan with resources + AI analysis"]
+  AIVerify --> Plan["Store plan + AI analysis"]
   Plan --> DB["Persist to PostgreSQL"]
   Plan --> SELECT["Select Target Cluster"]
-  SELECT --> APPLY["Apply to Target (editable YAML)"]
+  SELECT --> APPLY["Apply to Target\n(editable YAML)"]
   APPLY --> AUDIT["Record in Audit Log"]
         </pre>
       </div>
 
-      <div class="mermaid-wrapper">
-        <h3>Developer Hub — 3scale Auto-Discovery + GateForge Plugin</h3>
+      <div class="mermaid-wrapper" onclick="openMermaidLightbox(this)">
+        <h3>Developer Hub &mdash; 3scale Auto-Discovery + GateForge Plugin</h3>
+        <span class="zoom-hint-diagram">Click to enlarge</span>
         <pre class="mermaid">
 sequenceDiagram
   participant ThreeScale as 3scale Admin API
@@ -451,21 +529,22 @@ sequenceDiagram
         </pre>
       </div>
 
-      <div class="mermaid-wrapper">
-        <h3>Phase 4 &mdash; Generated CRDs per Product</h3>
+      <div class="mermaid-wrapper" onclick="openMermaidLightbox(this)">
+        <h3>Generated CRDs per Product (Connectivity Link 1.3)</h3>
+        <span class="zoom-hint-diagram">Click to enlarge</span>
         <pre class="mermaid">
 flowchart LR
   Product["3scale Product"] --> Gateway["Gateway"]
   Product --> HTTPRoute["HTTPRoute"]
   Product --> AuthPolicy["AuthPolicy"]
   Product --> RateLimit["RateLimitPolicy"]
-  Product --> APIProduct["APIProduct<br/>(devportal.kuadrant.io)"]
+  Product --> APIProduct["APIProduct\n(devportal.kuadrant.io)"]
   Product --> Route["OpenShift Route"]
 
-  Plans["Application Plans"] --> PlanPolicy["PlanPolicy<br/>(extensions.kuadrant.io)"]
-  Keys["Application Keys"] --> APIKey["APIKey<br/>(devportal.kuadrant.io)"]
+  Plans["Application Plans"] --> PlanPolicy["PlanPolicy\n(extensions.kuadrant.io)"]
+  Keys["Application Keys"] --> APIKey["APIKey\n(devportal.kuadrant.io)"]
 
-  Observability{"Observability<br/>enabled?"} -->|Yes| TelemetryPolicy["TelemetryPolicy<br/>(extensions.kuadrant.io)"]
+  Observability{"Observability\nenabled?"} -->|Yes| TelemetryPolicy["TelemetryPolicy\n(extensions.kuadrant.io)"]
   Observability -->|No| Skip["Skipped"]
 
   style APIProduct fill:#e6f5e0,stroke:#2d6b24
@@ -476,8 +555,9 @@ flowchart LR
         </pre>
       </div>
 
-      <div class="mermaid-wrapper">
+      <div class="mermaid-wrapper" onclick="openMermaidLightbox(this)">
         <h3>AI Chat FAQ Cache Flow</h3>
+        <span class="zoom-hint-diagram">Click to enlarge</span>
         <pre class="mermaid">
 flowchart LR
   User[User Question] --> Normalize[Normalize text]
@@ -490,8 +570,9 @@ flowchart LR
         </pre>
       </div>
 
-      <div class="mermaid-wrapper">
+      <div class="mermaid-wrapper" onclick="openMermaidLightbox(this)">
         <h3>AI / MCP Tool Calling Flow</h3>
+        <span class="zoom-hint-diagram">Click to enlarge</span>
         <pre class="mermaid">
 sequenceDiagram
   participant U as User
@@ -764,11 +845,37 @@ sequenceDiagram
 
     function openLightbox(el) {
       var src = el.querySelector('img').src;
-      document.getElementById('lightbox-img').src = src;
+      var lbImg = document.getElementById('lightbox-img');
+      lbImg.src = src;
+      lbImg.style.display = 'block';
+      var prev = document.querySelector('.lightbox-svg');
+      if (prev) prev.remove();
       document.getElementById('lightbox').classList.add('active');
     }
+
+    function openMermaidLightbox(wrapper) {
+      var svg = wrapper.querySelector('svg');
+      if (!svg) return;
+      var serializer = new XMLSerializer();
+      var svgStr = serializer.serializeToString(svg);
+      var blob = new Blob([svgStr], {type: 'image/svg+xml;charset=utf-8'});
+      var url = URL.createObjectURL(blob);
+      var lbImg = document.getElementById('lightbox-img');
+      lbImg.src = url;
+      lbImg.style.display = 'block';
+      lbImg.style.background = 'white';
+      lbImg.style.padding = '24px';
+      var prev = document.querySelector('.lightbox-svg');
+      if (prev) prev.remove();
+      document.getElementById('lightbox').classList.add('active');
+    }
+
     function closeLightbox() {
       document.getElementById('lightbox').classList.remove('active');
+      var lbImg = document.getElementById('lightbox-img');
+      lbImg.style.background = '';
+      lbImg.style.padding = '';
+      URL.revokeObjectURL(lbImg.src);
     }
     document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
   </script>
