@@ -43,6 +43,12 @@ rules:
   - apiGroups: [gateway.networking.k8s.io]
     resources: [gateways, httproutes]
     verbs: [get, list]
+  - apiGroups: [devportal.kuadrant.io]
+    resources: [apiproducts, apikeys]
+    verbs: [get, list]
+  - apiGroups: [extensions.kuadrant.io]
+    resources: [telemetrypolicies, planpolicies]
+    verbs: [get, list]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -69,11 +75,20 @@ rules:
   - apiGroups: [gateway.networking.k8s.io]
     resources: [gateways, httproutes]
     verbs: [get, list, create, update, patch, delete]
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get, list, create, update, patch, delete]
   - apiGroups: [kuadrant.io]
     resources: [authpolicies, ratelimitpolicies]
     verbs: [get, list, create, update, patch, delete]
   - apiGroups: [route.openshift.io]
     resources: [routes, routes/custom-host]
+    verbs: [get, list, create, update, patch, delete]
+  - apiGroups: [devportal.kuadrant.io]
+    resources: [apiproducts, apikeys]
+    verbs: [get, list, create, update, patch, delete]
+  - apiGroups: [extensions.kuadrant.io]
+    resources: [telemetrypolicies, planpolicies]
     verbs: [get, list, create, update, patch, delete]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

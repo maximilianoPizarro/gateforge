@@ -77,6 +77,24 @@ public class ThreeScaleAdminApiClient {
                 "backend_usages", "backend_usage");
     }
 
+    public List<Map<String, Object>> listApplicationPlans(long serviceId) {
+        return fetchPaginatedList(
+                "/admin/api/services/" + serviceId + "/application_plans.json",
+                "plans", "application_plan");
+    }
+
+    public List<Map<String, Object>> listPlanLimits(long planId) {
+        return fetchPaginatedList(
+                "/admin/api/application_plans/" + planId + "/limits.json",
+                "limits", "limit");
+    }
+
+    public List<Map<String, Object>> listApplications(long serviceId) {
+        return fetchPaginatedList(
+                "/admin/api/services/" + serviceId + "/applications.json",
+                "applications", "application");
+    }
+
     public Map<String, Object> getServiceProxy(long serviceId) {
         try {
             String url = buildUrl("/admin/api/services/" + serviceId + "/proxy.json", 1, 1);

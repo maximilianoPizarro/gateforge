@@ -1,0 +1,62 @@
+{{- if and .Values.observability.enabled .Values.observability.grafanaDashboard.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "gateforge.fullname" . }}-grafana-dashboard
+  labels:
+    {{- include "gateforge.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  gateforge-dashboard.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 0,
+      "links": [],
+      "panels": [
+        {
+          "title": "Migrations Total",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+          "targets": [{ "expr": "sum(gateforge_migrations_total)", "legendFormat": "Total" }]
+        },
+        {
+          "title": "Products Discovered",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+          "targets": [{ "expr": "gateforge_products_discovered", "legendFormat": "Products" }]
+        },
+        {
+          "title": "AI Chat Requests",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+          "targets": [{ "expr": "sum(gateforge_ai_chat_requests)", "legendFormat": "Chat" }]
+        },
+        {
+          "title": "Migration Duration (p95)",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+          "targets": [{ "expr": "histogram_quantile(0.95, rate(gateforge_migration_duration_seconds_bucket[5m]))", "legendFormat": "p95" }]
+        },
+        {
+          "title": "Migrations by Product",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+          "targets": [{ "expr": "sum by (product) (rate(gateforge_migrations_total[5m]))", "legendFormat": "{{`{{product}}`}}" }]
+        },
+        {
+          "title": "Chat Requests (Cached vs LLM)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+          "targets": [{ "expr": "sum by (type) (rate(gateforge_ai_chat_requests[5m]))", "legendFormat": "{{`{{type}}`}}" }]
+        }
+      ],
+      "schemaVersion": 39,
+      "tags": ["gateforge", "api-management"],
+      "templating": { "list": [] },
+      "time": { "from": "now-1h", "to": "now" },
+      "title": "GateForge - API Migration Dashboard",
+      "uid": "gateforge-dashboard"
+    }
+{{- end }}

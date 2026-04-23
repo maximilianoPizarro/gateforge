@@ -1,0 +1,17 @@
+{{- if and .Values.observability.enabled .Values.observability.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "gateforge.fullname" . }}-backend
+  labels:
+    {{- include "gateforge.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app: gateforge-backend
+  endpoints:
+    - port: http
+      path: /q/metrics
+      interval: 30s
+      scheme: http
+{{- end }}

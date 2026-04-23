@@ -104,6 +104,16 @@
             <artifactId>quarkus-infinispan-client</artifactId>
         </dependency>
 
+        <!-- OpenTelemetry (runtime-controlled via quarkus.otel.enabled) -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-opentelemetry</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-micrometer-registry-prometheus</artifactId>
+        </dependency>
+
         <!-- Test -->
         <dependency>
             <groupId>io.quarkus</groupId>

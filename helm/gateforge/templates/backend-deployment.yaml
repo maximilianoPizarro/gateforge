@@ -59,6 +59,8 @@ spec:
               value: {{ .Values.developerHub.enabled | default false | quote }}
             - name: DEVELOPER_HUB_URL
               value: {{ .Values.developerHub.url | default "" | quote }}
+            - name: DEVHUB_PLUGIN_WEBHOOK_URL
+              value: {{ .Values.developerHub.pluginWebhookUrl | default "" | quote }}
             - name: THREESCALE_SOURCES
               value: {{ .Values.threescale.sources | default "" | quote }}
             - name: TARGET_CLUSTERS
@@ -77,6 +79,14 @@ spec:
                 secretKeyRef:
                   name: {{ include "gateforge.fullname" . }}-config
                   key: DATASOURCE_PASSWORD
+            - name: OBSERVABILITY_ENABLED
+              value: {{ .Values.observability.enabled | default false | quote }}
+            {{- if .Values.observability.enabled }}
+            - name: OTEL_ENABLED
+              value: "true"
+            - name: OTEL_ENDPOINT
+              value: {{ .Values.observability.otelCollectorEndpoint | quote }}
+            {{- end }}
             {{- if .Values.datagrid.enabled }}
             - name: DATAGRID_HOST
               value: {{ include "gateforge.datagrid" . }}

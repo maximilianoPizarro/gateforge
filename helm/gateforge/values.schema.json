@@ -202,6 +202,42 @@
         "url": {
           "type": "string",
           "description": "Developer Hub base URL"
+        },
+        "pluginWebhookUrl": {
+          "type": "string",
+          "description": "URL of the gateforge-devhub-plugin webhook endpoint for migration events"
+        }
+      }
+    },
+    "observability": {
+      "type": "object",
+      "description": "Observability stack (optional). Enables OpenTelemetry, ServiceMonitor, and Grafana dashboard",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable observability features (OTel, metrics export, TelemetryPolicy generation)"
+        },
+        "otelCollectorEndpoint": {
+          "type": "string",
+          "description": "OpenTelemetry Collector OTLP endpoint URL"
+        },
+        "serviceMonitor": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Create a Prometheus ServiceMonitor for the backend"
+            }
+          }
+        },
+        "grafanaDashboard": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Create a ConfigMap with Grafana dashboard JSON"
+            }
+          }
         }
       }
     },

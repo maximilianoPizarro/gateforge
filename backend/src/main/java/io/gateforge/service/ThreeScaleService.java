@@ -175,10 +175,11 @@ public class ThreeScaleService {
                 ? api.authentication() : crd.authentication();
         String source = "CRD + Admin API (" + api.sourceCluster() + ")";
         return new ThreeScaleProduct(
-                crd.name(), crd.namespace(), crd.systemName(),
+                crd.name(), crd.namespace(), crd.systemName(), api.serviceId(),
                 crd.description().isEmpty() ? api.description() : crd.description(),
                 crd.deploymentOption(), rules, usages, auth, source,
-                null, null, api.sourceCluster()
+                null, null, api.sourceCluster(),
+                api.applicationPlans(), api.applications()
         );
     }
 
@@ -347,9 +348,10 @@ public class ThreeScaleService {
         return new ThreeScaleProduct(
                 resource.getMetadata().getName(),
                 resource.getMetadata().getNamespace(),
-                systemName, description, deployment,
+                systemName, 0L, description, deployment,
                 mappingRules, backendUsages, auth, "CRD",
-                null, null, "local"
+                null, null, "local",
+                List.of(), List.of()
         );
     }
 
@@ -407,12 +409,64 @@ public class ThreeScaleService {
                     LOG.log(Level.FINE, "Failed to fetch proxy for service " + serviceId, e);
                 }
 
+                List<ThreeScaleProduct.ApplicationPlan> appPlans = new ArrayList<>();
+                try {
+                    List<Map<String, Object>> rawPlans = client.listApplicationPlans(serviceId);
+                    for (Map<String, Object> rp : rawPlans) {
+                        long planId = toLong(rp.get("id"));
+                        String planName = String.valueOf(rp.getOrDefault("name", ""));
+                        String planSysName = String.valueOf(rp.getOrDefault("system_name", planName));
+                        String planState = String.valueOf(rp.getOrDefault("state", "published"));
+
+                        List<ThreeScaleProduct.PlanLimit> limits = new ArrayList<>();
+                        try {
+                            List<Map<String, Object>> rawLimits = client.listPlanLimits(planId);
+                            for (Map<String, Object> rl : rawLimits) {
+                                String metricName = String.valueOf(rl.getOrDefault("metric_name", "hits"));
+                                String period = String.valueOf(rl.getOrDefault("period", "day"));
+                                long value = toLong(rl.getOrDefault("value", 0));
+                                limits.add(new ThreeScaleProduct.PlanLimit(metricName, period, value));
+                            }
+                        } catch (Exception e) {
+                            LOG.log(Level.FINE, "Failed to fetch limits for plan " + planId, e);
+                        }
+                        appPlans.add(new ThreeScaleProduct.ApplicationPlan(planId, planName, planSysName, planState, limits));
+                    }
+                } catch (Exception e) {
+                    LOG.log(Level.FINE, "Failed to fetch application plans for service " + serviceId, e);
+                }
+
+                List<ThreeScaleProduct.Application> apps = new ArrayList<>();
+                try {
+                    List<Map<String, Object>> rawApps = client.listApplications(serviceId);
+                    for (Map<String, Object> ra : rawApps) {
+                        long appId = toLong(ra.get("id"));
+                        String appName = String.valueOf(ra.getOrDefault("name", "app-" + appId));
+                        String userKey = String.valueOf(ra.getOrDefault("user_key", ""));
+                        long planId = toLong(ra.get("plan_id"));
+                        String planRef = String.valueOf(ra.getOrDefault("plan_name", ""));
+                        String planSysRef = "";
+                        for (ThreeScaleProduct.ApplicationPlan ap : appPlans) {
+                            if (ap.id() == planId) {
+                                planRef = ap.name();
+                                planSysRef = ap.systemName();
+                                break;
+                            }
+                        }
+                        String email = String.valueOf(ra.getOrDefault("user_account_id", appName + "@gateforge.io"));
+                        apps.add(new ThreeScaleProduct.Application(appId, appName, userKey, planRef, planSysRef, email));
+                    }
+                } catch (Exception e) {
+                    LOG.log(Level.FINE, "Failed to fetch applications for service " + serviceId, e);
+                }
+
                 products.add(new ThreeScaleProduct(
                         name, "admin-api",
-                        systemName, description, deployment,
+                        systemName, serviceId, description, deployment,
                         mappingRules, backendUsages, auth,
                         "Admin API (" + client.getSourceId() + ")",
-                        null, null, client.getSourceId()
+                        null, null, client.getSourceId(),
+                        appPlans, apps
                 ));
             }
         } catch (Exception e) {
@@ -454,10 +508,11 @@ public class ThreeScaleService {
             String[] info = endpoints.get(usage.backendName());
             if (info != null) {
                 return new ThreeScaleProduct(
-                        p.name(), p.namespace(), p.systemName(),
+                        p.name(), p.namespace(), p.systemName(), p.serviceId(),
                         p.description(), p.deploymentOption(),
                         p.mappingRules(), p.backendUsages(), p.authentication(),
-                        p.source(), info[1], info[0], p.sourceCluster()
+                        p.source(), info[1], info[0], p.sourceCluster(),
+                        p.applicationPlans(), p.applications()
                 );
             }
         }

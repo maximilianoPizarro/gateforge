@@ -54,6 +54,7 @@ clusterDomain: apps.cluster.example.com
 developerHub:
   enabled: false
   url: ""
+  pluginWebhookUrl: ""
 
 connectivityLink:
   targetNamespace: kuadrant-system
@@ -98,6 +99,14 @@ datagrid:
   persistence:
     enabled: false
     size: 1Gi
+
+observability:
+  enabled: false
+  otelCollectorEndpoint: "http://otel-collector.openshift-opentelemetry.svc:4317"
+  serviceMonitor:
+    enabled: false
+  grafanaDashboard:
+    enabled: false
 
 route:
   enabled: true

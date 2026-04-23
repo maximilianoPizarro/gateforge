@@ -47,6 +47,9 @@ public class MigrationService {
     @Inject
     MigrationAgent migrationAgent;
 
+    @Inject
+    GateForgeMetrics metrics;
+
     @ConfigProperty(name = "gateforge.connectivity-link.gateway-class-name", defaultValue = "istio")
     String gatewayClassName;
 
@@ -62,6 +65,9 @@ public class MigrationService {
     @ConfigProperty(name = "gateforge.developer-hub.url", defaultValue = "none")
     String developerHubUrl;
 
+    @ConfigProperty(name = "gateforge.observability.enabled", defaultValue = "false")
+    boolean observabilityEnabled;
+
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5)).build();
 
@@ -70,9 +76,11 @@ public class MigrationService {
             List<ThreeScaleProduct.MappingRule> effectiveRules, boolean hasRealOas) {}
 
     public MigrationPlan analyze(String gatewayStrategy, List<String> productNames, String targetClusterId) {
+        io.micrometer.core.instrument.Timer.Sample timerSample = metrics.startMigrationTimer();
         List<ThreeScaleProduct> products = threeScaleService.listProducts().stream()
                 .filter(p -> productNames.isEmpty() || productNames.contains(p.name()))
                 .toList();
+        metrics.setProductsDiscovered(products.size());
 
         BackendIndex backendEndpoints = resolveBackendEndpoints();
 
@@ -140,6 +148,22 @@ public class MigrationService {
 
             resources.add(buildAuthPolicy(sysName + "-auth", ns, routeName, product));
             resources.add(buildRateLimitPolicy(sysName + "-ratelimit", ns, routeName, product));
+
+            if (product.applicationPlans() != null && !product.applicationPlans().isEmpty()) {
+                resources.add(buildPlanPolicy(sysName + "-plans", ns, routeName, product));
+            }
+
+            resources.add(buildApiProduct(sysName + "-api", ns, routeName, product));
+
+            if (product.applications() != null && !product.applications().isEmpty()) {
+                List<MigrationPlan.GeneratedResource> apiKeys = buildApiKeys(sysName, ns, product);
+                resources.addAll(apiKeys);
+            }
+
+            if (observabilityEnabled) {
+                resources.add(buildTelemetryPolicy(sysName + "-telemetry", ns, routeName, product));
+            }
+
             resources.add(buildOpenShiftRoute(sysName, gatewayName));
         }
 
@@ -160,6 +184,10 @@ public class MigrationService {
         );
 
         persistPlan(plan);
+        metrics.stopMigrationTimer(timerSample);
+        for (ThreeScaleProduct p : products) {
+            metrics.recordMigration(p.systemName(), "analyzed");
+        }
         return plan;
     }
 
@@ -247,10 +275,10 @@ public class MigrationService {
             Map<String, Object> method = new LinkedHashMap<>();
             method.put("summary", rule.metricRef() != null && !rule.metricRef().isBlank()
                     ? rule.metricRef() : rule.httpMethod() + " " + path);
-            Map<String, Object> okResp = new LinkedHashMap<>();
-            okResp.put("description", "Success");
-            Map<String, Object> responses = new LinkedHashMap<>();
-            responses.put("200", okResp);
+            method.put("operationId", rule.httpMethod().toLowerCase() + path.replaceAll("[^a-zA-Z0-9]", "_"));
+
+            boolean isCollection = "GET".equalsIgnoreCase(rule.httpMethod()) && !path.contains("{id}");
+            Map<String, Object> responses = buildEnrichedResponses(path, product.name(), isCollection);
             method.put("responses", responses);
             paths.get(path).put(rule.httpMethod().toLowerCase(), method);
         }
@@ -274,18 +302,94 @@ public class MigrationService {
     }
 
     private String buildMinimalOpenApi(ThreeScaleProduct product, String hostname) {
+        Map<String, Object> okContent = new LinkedHashMap<>();
+        okContent.put("schema", Map.of("type", "object", "properties", Map.of(
+                "status", Map.of("type", "string"),
+                "service", Map.of("type", "string"),
+                "timestamp", Map.of("type", "string", "format", "date-time"))));
+        okContent.put("example", Map.of("status", "ok", "service", product.name(), "timestamp", "2026-04-22T10:30:00Z"));
+
+        Map<String, Object> okResp = new LinkedHashMap<>();
+        okResp.put("description", "OK");
+        okResp.put("content", Map.of("application/json", okContent));
+
         Map<String, Object> spec = new LinkedHashMap<>();
         spec.put("openapi", "3.0.3");
         spec.put("info", Map.of("title", product.name(), "version", "1.0.0"));
         spec.put("servers", List.of(Map.of("url", "https://" + hostname)));
         spec.put("paths", Map.of("/", Map.of("get", Map.of(
                 "summary", "Root endpoint",
-                "responses", Map.of("200", Map.of("description", "OK"))))));
+                "operationId", "getRoot",
+                "responses", Map.of("200", okResp,
+                        "401", UNAUTHORIZED_RESPONSE)))));
         try {
             return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(spec);
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private Map<String, Object> buildEnrichedResponses(String path, String productName, boolean isCollection) {
+        Map<String, Object> example = resolveExamplePayload(path, productName);
+        Object body = isCollection ? List.of(example) : example;
+
+        Map<String, Object> okContent = new LinkedHashMap<>();
+        okContent.put("schema", Map.of("type", isCollection ? "array" : "object"));
+        okContent.put("example", body);
+
+        Map<String, Object> okResp = new LinkedHashMap<>();
+        okResp.put("description", "Success");
+        okResp.put("content", Map.of("application/json", okContent));
+
+        Map<String, Object> responses = new LinkedHashMap<>();
+        responses.put("200", okResp);
+        responses.put("401", UNAUTHORIZED_RESPONSE);
+        responses.put("404", NOT_FOUND_RESPONSE);
+        return responses;
+    }
+
+    private static final Map<String, Object> UNAUTHORIZED_RESPONSE = Map.of(
+            "description", "Unauthorized",
+            "content", Map.of("application/json", Map.of(
+                    "example", Map.of("error", "unauthorized", "message", "API key is missing or invalid"))));
+
+    private static final Map<String, Object> NOT_FOUND_RESPONSE = Map.of(
+            "description", "Not Found",
+            "content", Map.of("application/json", Map.of(
+                    "example", Map.of("error", "not_found", "message", "Resource not found"))));
+
+    private Map<String, Object> resolveExamplePayload(String path, String productName) {
+        String lp = path.toLowerCase();
+        if (lp.contains("account")) {
+            return Map.of("accountId", "ACC-001", "holder", "John Doe", "balance", 1500.00,
+                    "currency", "USD", "status", "active");
+        }
+        if (lp.contains("card") || lp.contains("card-issuing")) {
+            return Map.of("cardId", "CARD-9876", "last4", "4242", "type", "virtual",
+                    "status", "active", "expiresAt", "2028-12");
+        }
+        if (lp.contains("transaction") || lp.contains("payment")) {
+            return Map.of("transactionId", "TXN-5432", "amount", 99.99, "currency", "USD",
+                    "status", "completed", "createdAt", "2026-04-22T10:30:00Z");
+        }
+        if (lp.contains("wallet") || lp.contains("nfl-wallet")) {
+            return Map.of("walletId", "W-001", "owner", "user1", "balance", 250.00,
+                    "currency", "USD");
+        }
+        if (lp.contains("user") || lp.contains("customer")) {
+            return Map.of("userId", "USR-001", "name", "Jane Smith", "email", "jane@example.com",
+                    "status", "active");
+        }
+        if (lp.contains("product") || lp.contains("catalog")) {
+            return Map.of("productId", "PROD-001", "name", "Premium Plan", "price", 29.99,
+                    "currency", "USD", "available", true);
+        }
+        if (lp.contains("order")) {
+            return Map.of("orderId", "ORD-001", "total", 149.99, "currency", "USD",
+                    "status", "confirmed", "createdAt", "2026-04-22T10:30:00Z");
+        }
+        return Map.of("id", "resource-001", "name", productName, "status", "ok",
+                "timestamp", "2026-04-22T10:30:00Z");
     }
 
     private String patchKuadrantctlOutput(String yaml, String kind, String name,
@@ -580,6 +684,189 @@ public class MigrationService {
                     sysName));
         }
         return sb.toString();
+    }
+
+    private MigrationPlan.GeneratedResource buildPlanPolicy(
+            String name, String namespace, String routeName, ThreeScaleProduct product) {
+
+        StringBuilder plans = new StringBuilder();
+        for (ThreeScaleProduct.ApplicationPlan plan : product.applicationPlans()) {
+            if (!"published".equalsIgnoreCase(plan.state()) && !"hidden".equalsIgnoreCase(plan.state())) continue;
+            plans.append("    - tier: \"").append(plan.systemName()).append("\"\n");
+            plans.append("      predicate: |\n");
+            plans.append("        has(auth.identity) && auth.identity.metadata.annotations[\"secret.kuadrant.io/plan-id\"] == \"")
+                    .append(plan.systemName()).append("\"\n");
+            plans.append("      limits:\n");
+
+            for (ThreeScaleProduct.PlanLimit limit : plan.limits()) {
+                switch (limit.period()) {
+                    case "day" -> plans.append("        daily: ").append(limit.value()).append("\n");
+                    case "month" -> plans.append("        monthly: ").append(limit.value()).append("\n");
+                    case "week" -> plans.append("        weekly: ").append(limit.value()).append("\n");
+                    case "year", "eternity" -> plans.append("        yearly: ").append(limit.value()).append("\n");
+                    case "hour" -> {
+                        plans.append("        custom:\n");
+                        plans.append("          - limit: ").append(limit.value()).append("\n");
+                        plans.append("            window: \"1h\"\n");
+                    }
+                    case "minute" -> {
+                        plans.append("        custom:\n");
+                        plans.append("          - limit: ").append(limit.value()).append("\n");
+                        plans.append("            window: \"1m\"\n");
+                    }
+                }
+            }
+            if (plan.limits().isEmpty()) {
+                plans.append("        daily: 1000\n");
+            }
+        }
+
+        String yaml = """
+                apiVersion: extensions.kuadrant.io/v1alpha1
+                kind: PlanPolicy
+                metadata:
+                  name: %s
+                  namespace: %s
+                  labels:
+                    app.kubernetes.io/managed-by: gateforge
+                    "gateforge.io/product": "%s"
+                spec:
+                  targetRef:
+                    group: gateway.networking.k8s.io
+                    kind: HTTPRoute
+                    name: %s
+                  plans:
+                %s""".formatted(name, namespace, product.systemName(), routeName, plans.toString());
+
+        return new MigrationPlan.GeneratedResource("PlanPolicy", name, namespace, yaml);
+    }
+
+    private List<MigrationPlan.GeneratedResource> buildApiKeys(
+            String sysName, String namespace, ThreeScaleProduct product) {
+
+        List<MigrationPlan.GeneratedResource> keys = new ArrayList<>();
+        for (ThreeScaleProduct.Application app : product.applications()) {
+            String safeName = app.name().toLowerCase().replaceAll("[^a-z0-9-]", "-");
+            if (safeName.length() > 40) safeName = safeName.substring(0, 40);
+            String keyName = sysName + "-key-" + safeName;
+
+            String yaml = """
+                    apiVersion: devportal.kuadrant.io/v1alpha1
+                    kind: APIKey
+                    metadata:
+                      name: %s
+                      namespace: %s
+                      labels:
+                        app.kubernetes.io/managed-by: gateforge
+                        "gateforge.io/product": "%s"
+                    spec:
+                      apiProductRef:
+                        name: %s-api
+                      planTier: "%s"
+                      requestedBy:
+                        userId: "%s"
+                        email: "%s"
+                      useCase: "Migrated from 3scale application '%s' by GateForge"
+                    """.formatted(keyName, namespace, sysName, sysName,
+                    app.planSystemName().isBlank() ? "default" : app.planSystemName(),
+                    app.accountEmail(), app.accountEmail(), app.name());
+
+            keys.add(new MigrationPlan.GeneratedResource("APIKey", keyName, namespace, yaml));
+        }
+        return keys;
+    }
+
+    private MigrationPlan.GeneratedResource buildApiProduct(
+            String name, String namespace, String routeName, ThreeScaleProduct product) {
+
+        String desc = product.description() != null && !product.description().isBlank()
+                ? product.description().replace("\"", "'")
+                : product.name();
+
+        String authType = "api-key";
+        if (product.authentication() != null) {
+            String type = String.valueOf(product.authentication().getOrDefault("type", ""));
+            if ("oidc".equalsIgnoreCase(type) || "openid_connect".equalsIgnoreCase(type)) {
+                authType = "oidc";
+            }
+        }
+
+        String hostname = product.systemName() + "." + clusterDomain;
+
+        String yaml = """
+                apiVersion: devportal.kuadrant.io/v1alpha1
+                kind: APIProduct
+                metadata:
+                  name: %s
+                  namespace: %s
+                  labels:
+                    app.kubernetes.io/managed-by: gateforge
+                    "gateforge.io/product": "%s"
+                    backstage.io/kubernetes-id: %s
+                spec:
+                  targetRef:
+                    group: gateway.networking.k8s.io
+                    kind: HTTPRoute
+                    name: %s
+                  displayName: "%s"
+                  description: |
+                    %s
+                    Migrated from 3scale to Connectivity Link by GateForge.
+                  version: "v1"
+                  publishStatus: Published
+                  approvalMode: automatic
+                  tags:
+                    - %s
+                    - kuadrant
+                    - gateforge-migrated
+                  contact:
+                    team: platform-engineering
+                    email: "platform@%s"
+                  documentation:
+                    openAPISpecURL: "https://%s/q/openapi"
+                    swaggerUI: "https://%s/q/swagger-ui"
+                """.formatted(name, namespace, product.systemName(), product.systemName(),
+                routeName, product.name(), desc, authType, clusterDomain, hostname, hostname);
+
+        return new MigrationPlan.GeneratedResource("APIProduct", name, namespace, yaml);
+    }
+
+    private MigrationPlan.GeneratedResource buildTelemetryPolicy(
+            String name, String namespace, String routeName, ThreeScaleProduct product) {
+
+        String authType = "api-key";
+        if (product.authentication() != null) {
+            String type = String.valueOf(product.authentication().getOrDefault("type", ""));
+            if ("oidc".equalsIgnoreCase(type) || "openid_connect".equalsIgnoreCase(type)) {
+                authType = "oidc";
+            }
+        }
+
+        String yaml = """
+                apiVersion: extensions.kuadrant.io/v1alpha1
+                kind: TelemetryPolicy
+                metadata:
+                  name: %s
+                  namespace: %s
+                  labels:
+                    app.kubernetes.io/managed-by: gateforge
+                    "gateforge.io/product": "%s"
+                spec:
+                  targetRef:
+                    group: gateway.networking.k8s.io
+                    kind: HTTPRoute
+                    name: %s
+                  metrics:
+                    default:
+                      labels:
+                        product: '"%s"'
+                        auth_type: '"%s"'
+                        plan: 'auth.identity.metadata.annotations["secret.kuadrant.io/plan-id"]'
+                        user: 'auth.identity.userid'
+                """.formatted(name, namespace, product.systemName(), routeName,
+                product.systemName(), authType);
+
+        return new MigrationPlan.GeneratedResource("TelemetryPolicy", name, namespace, yaml);
     }
 
     private MigrationPlan.GeneratedResource buildGatewayResource(String name, String label) {

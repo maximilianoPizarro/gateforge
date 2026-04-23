@@ -1,0 +1,1 @@
+export { gateforgePlugin } from './plugin';

@@ -3,6 +3,7 @@ package io.gateforge.resource;
 import io.gateforge.ai.GateForgeTools;
 import io.gateforge.ai.MigrationAgent;
 import io.gateforge.model.ChatMessage;
+import io.gateforge.service.GateForgeMetrics;
 import io.gateforge.service.ThreeScaleService;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
@@ -51,6 +52,9 @@ public class ChatResource {
 
     @Inject
     RemoteCacheManager cacheManager;
+
+    @Inject
+    GateForgeMetrics gateForgeMetrics;
 
     void onStartup(@Observes StartupEvent ev) {
         ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -106,6 +110,7 @@ public class ChatResource {
                 String cached = faqCache.get(normalized);
                 if (cached != null) {
                     LOG.infof("FAQ cache hit for: %s", userMessage.content());
+                    gateForgeMetrics.recordChatRequest("cached");
                     return Response.ok(new ChatMessage("assistant", cached, true)).build();
                 }
             }
@@ -113,6 +118,7 @@ public class ChatResource {
             String contextEnriched = buildContextMessage(userMessage.content());
             String response = migrationAgent.chat(contextEnriched);
             response = cleanThinkingBlocks(response);
+            gateForgeMetrics.recordChatRequest("llm");
             return Response.ok(new ChatMessage("assistant", response, false)).build();
         } catch (Exception e) {
             LOG.error("AI chat failed", e);
