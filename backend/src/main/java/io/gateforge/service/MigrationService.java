@@ -133,6 +133,7 @@ public class MigrationService {
                     if (httpRouteOut != null && !httpRouteOut.startsWith("ERROR") && httpRouteOut.contains("kind")) {
                         String patchedHttp = patchKuadrantctlOutput(httpRouteOut, "HTTPRoute", routeName,
                                 ns, gatewayName, gatewayNamespace, sysName, hostname);
+                        patchedHttp = consolidateHttpRouteRules(patchedHttp, ctx.backendSvcName);
                         resources.add(new MigrationPlan.GeneratedResource("HTTPRoute", routeName, ns, patchedHttp));
                         usedKuadrantctl = true;
                         LOG.infof("kuadrantctl generated HTTPRoute for %s:\n%s", sysName, patchedHttp);
@@ -421,6 +422,58 @@ public class MigrationService {
         }
 
         return yaml;
+    }
+
+    private String consolidateHttpRouteRules(String yaml, String backendSvcName) {
+        long ruleCount = yaml.lines()
+                .filter(line -> line.trim().startsWith("- matches:"))
+                .count();
+
+        if (ruleCount <= 16) return yaml;
+
+        LOG.infof("HTTPRoute has %d rules (max 16), consolidating to prefix-based rules", ruleCount);
+
+        int rulesStart = yaml.indexOf("\n  rules:\n");
+        if (rulesStart < 0) return yaml;
+
+        String rulesSection = yaml.substring(rulesStart);
+        Set<String> prefixes = new LinkedHashSet<>();
+
+        for (String line : rulesSection.split("\n")) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith("value:")) {
+                String val = trimmed.substring(6).trim().replaceAll("^[\"']|[\"']$", "");
+                if (val.startsWith("/")) {
+                    String[] segments = val.split("/", 3);
+                    if (segments.length > 1 && !segments[1].isEmpty()) {
+                        prefixes.add("/" + segments[1]);
+                    } else {
+                        prefixes.add("/");
+                    }
+                }
+            }
+        }
+
+        if (prefixes.isEmpty()) prefixes.add("/");
+        if (prefixes.size() > 16) {
+            prefixes = new LinkedHashSet<>();
+            prefixes.add("/");
+        }
+
+        LOG.infof("Consolidated %d rules into %d prefix-based rules: %s", ruleCount, prefixes.size(), prefixes);
+
+        StringBuilder rules = new StringBuilder();
+        for (String prefix : prefixes) {
+            rules.append("    - matches:\n");
+            rules.append("        - path:\n");
+            rules.append("            type: PathPrefix\n");
+            rules.append("            value: ").append(prefix).append("\n");
+            rules.append("      backendRefs:\n");
+            rules.append("        - name: ").append(backendSvcName).append("\n");
+            rules.append("          port: 8080\n");
+        }
+
+        return yaml.substring(0, rulesStart) + "\n  rules:\n" + rules;
     }
 
     private String runAiVerification(List<ThreeScaleProduct> products, List<MigrationPlan.GeneratedResource> resources) {
