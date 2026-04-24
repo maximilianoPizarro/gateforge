@@ -109,6 +109,9 @@
       .topnav-brand { margin-right: 12px; font-size: 0.9rem; }
     }
 
+    .tab-page { display: none; }
+    .tab-page.active { display: block; }
+
     .mermaid-wrapper { background: #fff; border: 1px solid #d2d2d2; border-radius: 8px; padding: 24px; margin: 24px 0; overflow-x: auto; cursor: zoom-in; position: relative; transition: box-shadow 0.2s; }
     .mermaid-wrapper:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.12); }
     .mermaid-wrapper h3 { margin-bottom: 16px; color: #151515; }
@@ -223,24 +226,24 @@
     <div class="container">
       <a href="#" class="topnav-brand"><img src="assets/logo.svg" alt="">GateForge</a>
       <div class="topnav-links">
-        <a href="#features">Features</a>
-        <a href="#screenshots">Screenshots</a>
-        <a href="#architecture">Architecture</a>
-        <a href="#api-reference">API</a>
-        <a href="#getting-started">Getting Started</a>
-        <a href="#installation">Install</a>
-        <a href="#devhub-integration">Developer Hub</a>
-        <a href="#argocd-deployment">ArgoCD</a>
-        <a href="#single-tenant">Single-Tenant</a>
-        <a href="#multi-tenant">Multi-Tenant</a>
-        <a href="#ai-config">AI Config</a>
-        <a href="#ai-flow">AI Flow</a>
-        <a href="#kuadrantctl">kuadrantctl</a>
-        <a href="#helm-values">Helm Values</a>
+        <a href="#" data-tab="features">Features</a>
+        <a href="#" data-tab="screenshots">Screenshots</a>
+        <a href="#" data-tab="architecture">Architecture</a>
+        <a href="#" data-tab="api-reference">API</a>
+        <a href="#" data-tab="getting-started">Getting Started</a>
+        <a href="#" data-tab="installation">Install</a>
+        <a href="#" data-tab="devhub-integration">Developer Hub</a>
+        <a href="#" data-tab="argocd-deployment">ArgoCD</a>
+        <a href="#" data-tab="single-tenant">Single-Tenant</a>
+        <a href="#" data-tab="multi-tenant">Multi-Tenant</a>
+        <a href="#" data-tab="ai-config">AI Config</a>
+        <a href="#" data-tab="kuadrantctl">kuadrantctl</a>
+        <a href="#" data-tab="helm-values">Helm Values</a>
       </div>
     </div>
   </nav>
 
+  <div class="tab-page active" data-tab="features">
   <section class="section" style="background:#f5f5f5;" id="features">
     <div class="container">
       <h2>Product Features</h2>
@@ -381,7 +384,9 @@
       </table>
     </div>
   </section>
+  </div>
 
+  <div class="tab-page" data-tab="screenshots">
   <section class="section" id="screenshots">
     <div class="container">
       <h2>Screenshots</h2>
@@ -415,12 +420,14 @@
       </div>
     </div>
   </section>
+  </div>
 
   <div id="lightbox" class="lightbox" onclick="closeLightbox()">
     <img id="lightbox-img" src="" alt="Enlarged screenshot">
     <span class="lightbox-close">&times;</span>
   </div>
 
+  <div class="tab-page" data-tab="architecture">
   <section class="section" style="background: #f5f5f5;" id="architecture">
     <div class="container">
       <h2>Architecture</h2>
@@ -672,7 +679,9 @@ sequenceDiagram
       </table>
     </div>
   </section>
+  </div>
 
+  <div class="tab-page" data-tab="api-reference">
   <section class="section" id="api-reference">
     <div class="container">
       <h2>API Reference</h2>
@@ -739,7 +748,9 @@ sequenceDiagram
       </table>
     </div>
   </section>
+  </div>
 
+  <div class="tab-page" data-tab="getting-started">
   <section class="section" style="background: #f5f5f5;" id="getting-started">
     <div class="container">
       <h2>Getting Started</h2>
@@ -838,7 +849,9 @@ sequenceDiagram
       </table>
     </div>
   </section>
+  </div>
 
+  <div class="tab-page" data-tab="helm-values">
   <section class="section" style="background: #f5f5f5;" id="helm-values">
     <div class="container">
       <h2>Helm Chart Values</h2>
@@ -876,7 +889,9 @@ sequenceDiagram
       </table>
     </div>
   </section>
+  </div>
 
+  <div class="tab-page" data-tab="devhub-integration">
   <section class="section" id="devhub-integration">
     <div class="container">
       <h2>Developer Hub Integration</h2>
@@ -1003,7 +1018,9 @@ sequenceDiagram
       </div>
     </div>
   </section>
+  </div>
 
+  <div class="tab-page" data-tab="argocd-deployment">
   <section class="section" style="background:#f5f5f5;" id="argocd-deployment">
     <div class="container">
       <h2>ArgoCD Deployment</h2>
@@ -1129,7 +1146,9 @@ flowchart TB
       </ul>
     </div>
   </section>
+  </div>
 
+  <div class="tab-page" data-tab="installation">
   <section class="section" id="installation">
     <div class="container">
       <h2>Installation Guide</h2>
@@ -1171,7 +1190,9 @@ flowchart TB
       </ul>
     </div>
   </section>
+  </div>
 
+  <div class="tab-page" data-tab="single-tenant">
   <section class="section" style="background:#f5f5f5;" id="single-tenant">
     <div class="container">
       <h2>Configuration: Single-Tenant</h2>
@@ -1216,7 +1237,9 @@ flowchart TB
       </div>
     </div>
   </section>
+  </div>
 
+  <div class="tab-page" data-tab="multi-tenant">
   <section class="section" id="multi-tenant">
     <div class="container">
       <h2>Configuration: Multi-Tenant</h2>
@@ -1283,7 +1306,9 @@ flowchart TB
       </div>
     </div>
   </section>
+  </div>
 
+  <div class="tab-page" data-tab="ai-config">
   <section class="section" style="background:#f5f5f5;" id="ai-config">
     <div class="container">
       <h2>AI Model Configuration</h2>
@@ -1370,7 +1395,9 @@ flowchart LR
       </ul>
     </div>
   </section>
+  </div>
 
+  <div class="tab-page" data-tab="kuadrantctl">
   <section class="section" style="background:#f5f5f5;" id="kuadrantctl">
     <div class="container">
       <h2>kuadrantctl Primitives</h2>
@@ -1436,18 +1463,18 @@ flowchart TD
       </ul>
     </div>
   </section>
+  </div>
 
   <footer class="site-footer">
     <div class="container">
       <div class="links">
-        <a href="#installation">Install</a>
-        <a href="#devhub-integration">Developer Hub</a>
-        <a href="#argocd-deployment">ArgoCD</a>
-        <a href="#single-tenant">Single-tenant</a>
-        <a href="#multi-tenant">Multi-tenant</a>
-        <a href="#ai-config">AI config</a>
-        <a href="#ai-flow">AI flow</a>
-        <a href="#kuadrantctl">kuadrantctl</a>
+        <a href="#" data-tab="installation">Install</a>
+        <a href="#" data-tab="devhub-integration">Developer Hub</a>
+        <a href="#" data-tab="argocd-deployment">ArgoCD</a>
+        <a href="#" data-tab="single-tenant">Single-Tenant</a>
+        <a href="#" data-tab="multi-tenant">Multi-Tenant</a>
+        <a href="#" data-tab="ai-config">AI Config</a>
+        <a href="#" data-tab="kuadrantctl">kuadrantctl</a>
         <a href="https://github.com/maximilianoPizarro/gateforge">GitHub</a>
         <a href="https://quay.io/repository/maximilianopizarro/gateforge-backend">Quay.io Backend</a>
         <a href="https://quay.io/repository/maximilianopizarro/gateforge-frontend">Quay.io Frontend</a>
@@ -1501,21 +1528,28 @@ flowchart TD
     document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeLightbox(); });
 
     (function() {
-      var links = document.querySelectorAll('.topnav-links a[href^="#"]');
-      var sections = [];
-      links.forEach(function(a) {
-        var sec = document.querySelector(a.getAttribute('href'));
-        if (sec) sections.push({ link: a, el: sec });
-      });
-      function onScroll() {
-        var scrollY = window.scrollY + 80;
-        var current = null;
-        sections.forEach(function(s) { if (s.el.offsetTop <= scrollY) current = s; });
-        links.forEach(function(a) { a.classList.remove('active'); });
-        if (current) current.link.classList.add('active');
+      function switchTab(tabId) {
+        document.querySelectorAll('.tab-page').forEach(function(p) {
+          p.classList.toggle('active', p.getAttribute('data-tab') === tabId);
+        });
+        document.querySelectorAll('[data-tab]').forEach(function(a) {
+          if (a.classList.contains('tab-page')) return;
+          a.classList.toggle('active', a.getAttribute('data-tab') === tabId);
+        });
+        window.scrollTo({ top: 0, behavior: 'instant' });
+        history.replaceState(null, '', '#' + tabId);
+        mermaid.run();
       }
-      window.addEventListener('scroll', onScroll, { passive: true });
-      onScroll();
+      document.addEventListener('click', function(e) {
+        var link = e.target.closest('[data-tab]:not(.tab-page)');
+        if (link) { e.preventDefault(); switchTab(link.getAttribute('data-tab')); }
+      });
+      var hash = location.hash.replace('#', '');
+      if (hash && document.querySelector('.tab-page[data-tab="' + hash + '"]')) {
+        switchTab(hash);
+      } else {
+        document.querySelector('.topnav-links a[data-tab="features"]').classList.add('active');
+      }
     })();
   </script>
 </body>

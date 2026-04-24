@@ -4,6 +4,7 @@
 
 # GateForge - 3scale to Connectivity Link Migration
 
+[![Build](https://github.com/maximilianoPizarro/gateforge/actions/workflows/build-push-quay.yml/badge.svg)](https://github.com/maximilianoPizarro/gateforge/actions/workflows/build-push-quay.yml)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/gateforge)](https://artifacthub.io/packages/search?repo=gateforge)
 [![Quay.io Backend](https://img.shields.io/badge/quay.io-backend-blue)](https://quay.io/repository/maximilianopizarro/gateforge-backend)
 [![Quay.io Frontend](https://img.shields.io/badge/quay.io-frontend-blue)](https://quay.io/repository/maximilianopizarro/gateforge-frontend)
