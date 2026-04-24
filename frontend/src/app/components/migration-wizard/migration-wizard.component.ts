@@ -215,22 +215,42 @@ import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult, FeatureFlags
           </div>
         </div>
 
-        <div *ngIf="developerHubEnabled && plan.catalogInfoYaml" class="catalog-info-section">
+        <div *ngIf="developerHubEnabled && applyResult && applyResult.failed === 0" class="catalog-info-section">
           <div class="catalog-info-header">
             <div style="display:flex; justify-content:space-between; align-items:center;">
-              <h3>Developer Hub Integration</h3>
+              <h3>Developer Hub — Component Registration</h3>
               <a *ngIf="developerHubUrl" [href]="developerHubUrl" target="_blank" class="btn-devhub-link">Open Developer Hub</a>
             </div>
-            <p>Register this <code>catalog-info.yaml</code> in Developer Hub to see your migrated APIs in the catalog with Kuadrant plugin support.</p>
+            <p>Review and optionally edit the Component definition below, then register it in Developer Hub.</p>
           </div>
           <div class="catalog-info-yaml">
             <div class="yaml-toolbar">
               <span class="badge badge-kind">catalog-info.yaml</span>
-              <button type="button" class="btn-copy" (click)="copyCatalogInfo()">
-                {{ catalogCopied ? 'Copied!' : 'Copy' }}
-              </button>
+              <div style="display:flex; gap:8px;">
+                <button type="button" class="btn-edit-toggle" [class.active]="componentEditMode" (click)="componentEditMode = !componentEditMode">
+                  {{ componentEditMode ? 'Preview' : 'Edit' }}
+                </button>
+                <button type="button" class="btn-copy" (click)="copyCatalogInfo()">
+                  {{ catalogCopied ? 'Copied!' : 'Copy' }}
+                </button>
+              </div>
             </div>
-            <pre><code>{{ plan.catalogInfoYaml }}</code></pre>
+            <textarea *ngIf="componentEditMode"
+                      class="yaml-editor catalog-editor"
+                      [value]="editedComponentYaml || plan.catalogInfoYaml || ''"
+                      (input)="onComponentYamlEdit($event)"
+                      spellcheck="false"
+                      rows="20"></textarea>
+            <pre *ngIf="!componentEditMode"><code>{{ editedComponentYaml || plan.catalogInfoYaml }}</code></pre>
+          </div>
+          <div class="registration-actions">
+            <button type="button" class="btn-register"
+                    (click)="registerComponent()"
+                    [disabled]="registering || registrationDone">
+              {{ registering ? 'Registering…' : (registrationDone ? 'Registered' : 'Register in Developer Hub') }}
+            </button>
+            <span *ngIf="registrationError" class="registration-error">{{ registrationError }}</span>
+            <span *ngIf="registrationDone" class="registration-success">Component registered successfully.</span>
           </div>
         </div>
 
@@ -909,6 +929,21 @@ import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult, FeatureFlags
     .cluster-name { display: block; font-weight: 600; color: #151515; font-size: 0.95rem; }
     .cluster-url { display: block; font-size: 0.78rem; color: #6a6e73; word-break: break-all; }
     .pill-cluster { background: #e8eaf6; border-color: #3f51b5; color: #283593; font-weight: 600; }
+
+    .catalog-editor { min-height: 280px; }
+    .registration-actions {
+      padding: 16px 24px; display: flex; align-items: center; gap: 16px;
+      background: #f0f7ff; border-top: 1px solid rgba(0,102,204,0.2);
+    }
+    .btn-register {
+      padding: 10px 24px; border-radius: 6px; font-weight: 600; cursor: pointer;
+      border: none; font-family: inherit; font-size: 0.95rem;
+      background: #0066cc; color: white;
+    }
+    .btn-register:hover:not(:disabled) { background: #004080; }
+    .btn-register:disabled { opacity: 0.5; cursor: not-allowed; }
+    .registration-error { color: #c9190b; font-size: 0.85rem; max-width: 500px; }
+    .registration-success { color: #3f9c35; font-weight: 600; font-size: 0.88rem; }
   `]
 })
 export class MigrationWizardComponent implements OnInit {
@@ -930,6 +965,11 @@ export class MigrationWizardComponent implements OnInit {
   catalogCopied = false;
   developerHubEnabled = false;
   developerHubUrl = '';
+  componentEditMode = false;
+  editedComponentYaml = '';
+  registering = false;
+  registrationDone = false;
+  registrationError = '';
   testCommands: TestCommand[] = [];
   historyOpen = false;
   historyLoading = false;
@@ -1118,10 +1158,32 @@ export class MigrationWizardComponent implements OnInit {
   }
 
   copyCatalogInfo(): void {
-    if (!this.plan?.catalogInfoYaml) return;
-    navigator.clipboard.writeText(this.plan.catalogInfoYaml).then(() => {
+    const yaml = this.editedComponentYaml || this.plan?.catalogInfoYaml;
+    if (!yaml) return;
+    navigator.clipboard.writeText(yaml).then(() => {
       this.catalogCopied = true;
       setTimeout(() => this.catalogCopied = false, 2000);
+    });
+  }
+
+  onComponentYamlEdit(event: Event): void {
+    this.editedComponentYaml = (event.target as HTMLTextAreaElement).value;
+  }
+
+  registerComponent(): void {
+    if (!this.plan) return;
+    this.registering = true;
+    this.registrationError = '';
+    const yaml = this.editedComponentYaml || this.plan.catalogInfoYaml || '';
+    this.api.confirmRegistration(this.plan.id, yaml).subscribe({
+      next: () => {
+        this.registrationDone = true;
+        this.registering = false;
+      },
+      error: (err) => {
+        this.registering = false;
+        this.registrationError = err.error?.message || err.message || 'Registration failed. Check Developer Hub connectivity.';
+      }
     });
   }
 

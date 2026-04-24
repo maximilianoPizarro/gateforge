@@ -4,9 +4,6 @@ LABEL name="gateforge-devhub-plugin" \
       summary="GateForge Developer Hub Dynamic Plugin" \
       description="Native RHDH dynamic backend plugin that receives GateForge migration events and registers Kuadrant/Connectivity Link entities in the Backstage catalog" \
       io.k8s.display-name="GateForge DevHub Dynamic Plugin" \
-      io.k8s.description="Backend catalog module for Red Hat Developer Hub — registers Component entities for APIs migrated from 3scale to Connectivity Link" \
       io.openshift.tags="gateforge,developer-hub,backstage,kuadrant,connectivity-link,dynamic-plugin" \
-      url="https://github.com/maximilianoPizarro/gateforge" \
-      vendor="GateForge" \
-      maintainer="Maximiliano Pizarro <maximiliano.pizarro.5@gmail.com>"
+      vendor="GateForge"
 COPY dist-dynamic/ /gateforge-backstage-plugin-catalog-backend-module-gateforge/

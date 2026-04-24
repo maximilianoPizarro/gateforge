@@ -42,14 +42,17 @@ public class MigrationResource {
     @Inject
     ObjectMapper objectMapper;
 
-    @ConfigProperty(name = "gateforge.developer-hub.plugin-webhook-url", defaultValue = "")
-    Optional<String> devhubWebhookUrl;
+    @ConfigProperty(name = "gateforge.developer-hub.scaffolder-url", defaultValue = "")
+    Optional<String> scaffolderUrl;
+
+    @ConfigProperty(name = "gateforge.developer-hub.scaffolder-token", defaultValue = "")
+    Optional<String> scaffolderToken;
 
     @ConfigProperty(name = "gateforge.cluster-domain", defaultValue = "apps.cluster.example.com")
     String clusterDomain;
 
-    private final HttpClient webhookClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(5)).build();
+    private final HttpClient scaffolderClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(10)).build();
 
     public record AnalyzeRequest(String gatewayStrategy, List<String> products, String targetClusterId) {}
     public record ApplyRequest(List<Integer> excludedIndexes, Map<String, String> yamlOverrides) {}
@@ -126,55 +129,53 @@ public class MigrationResource {
             }
         }
 
-        notifyDevHubPlugin("migration-applied", plan, clusterId);
-
         return result;
     }
 
-    private void notifyDevHubPlugin(String event, MigrationPlan plan, String clusterId) {
-        if (devhubWebhookUrl.isEmpty() || devhubWebhookUrl.get().isBlank()) return;
+    private void triggerScaffolderTemplate(String templateName, Map<String, Object> values) {
+        if (scaffolderUrl.isEmpty() || scaffolderUrl.get().isBlank()) {
+            LOG.info("Scaffolder URL not configured, skipping template trigger");
+            return;
+        }
         try {
-            List<Map<String, Object>> products = new ArrayList<>();
-            for (String productName : plan.sourceProducts()) {
-                products.add(Map.of(
-                        "systemName", productName.toLowerCase().replaceAll("[^a-z0-9-]", "-"),
-                        "name", productName,
-                        "namespace", plan.resources().stream()
-                                .filter(r -> "HTTPRoute".equals(r.kind()))
-                                .findFirst().map(MigrationPlan.GeneratedResource::namespace).orElse("default"),
-                        "authType", "apiKey"
-                ));
-            }
-
-            List<Map<String, String>> resources = plan.resources().stream()
-                    .filter(r -> Set.of("HTTPRoute", "APIProduct", "PlanPolicy", "APIKey").contains(r.kind()))
-                    .map(r -> Map.of("kind", r.kind(), "name", r.name(), "namespace", r.namespace()))
-                    .toList();
-
             Map<String, Object> payload = Map.of(
-                    "event", event,
-                    "planId", plan.id(),
-                    "products", products,
-                    "resources", resources,
-                    "clusterDomain", clusterDomain
+                    "templateRef", "template:default/" + templateName,
+                    "values", values
             );
 
             String json = objectMapper.writeValueAsString(payload);
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(devhubWebhookUrl.get()))
-                    .timeout(Duration.ofSeconds(10))
-                    .header("Content-Type", "application/json")
+            HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
+                    .uri(URI.create(scaffolderUrl.get()))
+                    .timeout(Duration.ofSeconds(30))
+                    .header("Content-Type", "application/json");
+
+            if (scaffolderToken.isPresent() && !scaffolderToken.get().isBlank()) {
+                reqBuilder.header("Authorization", "Bearer " + scaffolderToken.get());
+            }
+
+            HttpRequest req = reqBuilder
                     .POST(HttpRequest.BodyPublishers.ofString(json))
                     .build();
 
-            webhookClient.sendAsync(req, HttpResponse.BodyHandlers.ofString())
-                    .thenAccept(resp -> LOG.infof("DevHub webhook response: %d", resp.statusCode()))
-                    .exceptionally(ex -> {
-                        LOG.warnf("DevHub webhook failed: %s", ex.getMessage());
-                        return null;
-                    });
+            HttpResponse<String> resp = scaffolderClient.send(req, HttpResponse.BodyHandlers.ofString());
+            LOG.infof("Scaffolder API response: %d — %s", resp.statusCode(), resp.body());
+
+            if (resp.statusCode() >= 400) {
+                throw new jakarta.ws.rs.WebApplicationException(
+                        "Developer Hub Scaffolder API returned HTTP " + resp.statusCode() + ": " + resp.body(),
+                        resp.statusCode());
+            }
+        } catch (java.net.http.HttpTimeoutException e) {
+            String msg = "Developer Hub Scaffolder API timed out after 30s. The Component may not have been registered. "
+                    + "Check the Scaffolder tasks in Developer Hub or retry using POST /api/migration/plans/{id}/confirm-registration.";
+            LOG.error(msg, e);
+            throw new jakarta.ws.rs.WebApplicationException(msg, 504);
+        } catch (jakarta.ws.rs.WebApplicationException e) {
+            throw e;
         } catch (Exception e) {
-            LOG.warnf("Failed to send DevHub webhook: %s", e.getMessage());
+            String msg = "Failed to trigger Scaffolder template: " + e.getMessage();
+            LOG.error(msg, e);
+            throw new jakarta.ws.rs.WebApplicationException(msg, 502);
         }
     }
 
@@ -236,7 +237,18 @@ public class MigrationResource {
         }
 
         migrationService.updatePlanStatus(id, "REVERTED");
-        notifyDevHubPlugin("migration-reverted", plan, clusterId);
+
+        for (String productName : plan.sourceProducts()) {
+            String sysName = productName.toLowerCase().replaceAll("[^a-z0-9-]", "-");
+            try {
+                triggerScaffolderTemplate("gateforge-unregister-component", Map.of(
+                        "componentName", sysName + "-product"
+                ));
+            } catch (Exception e) {
+                LOG.warnf("Failed to unregister component %s-product: %s", sysName, e.getMessage());
+            }
+        }
+
         return new ApplyResult(id, applied, failed, results, clusterId);
     }
 
@@ -279,6 +291,46 @@ public class MigrationResource {
         }
 
         return new BulkRevertResult(request.planIds().size(), totalReverted, totalFailed, planResults);
+    }
+
+    @GET
+    @Path("/plans/{id}/catalog-info/{productName}")
+    @Produces("text/yaml")
+    public String getCatalogInfo(@PathParam("id") String id, @PathParam("productName") String productName) {
+        String yaml = migrationService.getCatalogInfoForProduct(id, productName);
+        if (yaml == null) {
+            throw new NotFoundException("Plan or product not found: " + id + "/" + productName);
+        }
+        return yaml;
+    }
+
+    public record ConfirmRegistrationRequest(String componentYaml) {}
+
+    @POST
+    @Path("/plans/{id}/confirm-registration")
+    public Map<String, String> confirmRegistration(@PathParam("id") String id, ConfirmRegistrationRequest request) {
+        MigrationPlan plan = migrationService.getPlan(id);
+        if (plan == null) {
+            throw new NotFoundException("Plan not found: " + id);
+        }
+
+        for (String productName : plan.sourceProducts()) {
+            String sysName = productName.toLowerCase().replaceAll("[^a-z0-9-]", "-");
+            String namespace = plan.resources().stream()
+                    .filter(r -> "HTTPRoute".equals(r.kind()))
+                    .findFirst().map(MigrationPlan.GeneratedResource::namespace).orElse("default");
+
+            triggerScaffolderTemplate("gateforge-register-component", Map.of(
+                    "planId", id,
+                    "productName", sysName,
+                    "componentName", sysName + "-product",
+                    "namespace", namespace,
+                    "owner", "group:default/3scale",
+                    "clusterDomain", clusterDomain
+            ));
+        }
+
+        return Map.of("status", "registered", "planId", id);
     }
 
     @GET

@@ -59,8 +59,10 @@ spec:
               value: {{ .Values.developerHub.enabled | default false | quote }}
             - name: DEVELOPER_HUB_URL
               value: {{ .Values.developerHub.url | default "" | quote }}
-            - name: DEVHUB_PLUGIN_WEBHOOK_URL
-              value: {{ .Values.developerHub.pluginWebhookUrl | default "" | quote }}
+            - name: DEVHUB_SCAFFOLDER_URL
+              value: {{ .Values.developerHub.scaffolderUrl | default "" | quote }}
+            - name: DEVHUB_SCAFFOLDER_TOKEN
+              value: {{ .Values.developerHub.scaffolderToken | default "" | quote }}
             - name: THREESCALE_SOURCES
               value: {{ .Values.threescale.sources | default "" | quote }}
             - name: TARGET_CLUSTERS

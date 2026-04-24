@@ -203,9 +203,13 @@
           "type": "string",
           "description": "Developer Hub base URL"
         },
-        "pluginWebhookUrl": {
+        "scaffolderUrl": {
           "type": "string",
-          "description": "URL of the gateforge-devhub-plugin webhook endpoint for migration events"
+          "description": "RHDH Scaffolder API URL for Component registration (e.g. https://backstage.../api/scaffolder/v2/tasks)"
+        },
+        "scaffolderToken": {
+          "type": "string",
+          "description": "Bearer token for Scaffolder API authentication"
         }
       }
     },

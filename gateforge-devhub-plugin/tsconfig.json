@@ -3,6 +3,7 @@
     "outDir": "dist",
     "rootDir": "src",
     "declaration": true,
+    "declarationDir": "dist-types/src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,

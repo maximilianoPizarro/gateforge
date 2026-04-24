@@ -8,6 +8,21 @@ frontend/node_modules/
 frontend/dist/
 frontend/.angular/
 
+# DevHub Plugins — build artifacts
+gateforge-devhub-plugin/node_modules/
+gateforge-devhub-plugin/dist/
+gateforge-devhub-plugin/dist-dynamic/
+gateforge-devhub-plugin/dist-types/
+gateforge-devhub-plugin/yarn.lock
+gateforge-devhub-plugin/package-lock.json
+gateforge-devhub-plugin/tsconfig.tsbuildinfo
+gateforge-devhub-frontend/node_modules/
+gateforge-devhub-frontend/dist/
+gateforge-devhub-frontend/dist-dynamic/
+gateforge-devhub-frontend/dist-types/
+gateforge-devhub-frontend/package-lock.json
+gateforge-devhub-frontend/tsconfig.tsbuildinfo
+
 # IDE
 .idea/
 .vscode/

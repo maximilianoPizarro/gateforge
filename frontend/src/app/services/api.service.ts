@@ -202,6 +202,17 @@ export class ApiService {
     return this.http.get<TestCommand[]>(`${this.baseUrl}/migration/plans/${planId}/test-commands`);
   }
 
+  getCatalogInfo(planId: string, productName: string): Observable<string> {
+    return this.http.get(`${this.baseUrl}/migration/plans/${planId}/catalog-info/${productName}`, { responseType: 'text' });
+  }
+
+  confirmRegistration(planId: string, componentYaml?: string): Observable<Record<string, string>> {
+    return this.http.post<Record<string, string>>(
+      `${this.baseUrl}/migration/plans/${planId}/confirm-registration`,
+      { componentYaml: componentYaml || '' }
+    ).pipe(timeout(60000));
+  }
+
   chat(message: string): Observable<ChatMessage> {
     return this.http.post<ChatMessage>(`${this.baseUrl}/chat`, {
       role: 'user', content: message

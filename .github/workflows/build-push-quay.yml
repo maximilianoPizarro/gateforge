@@ -1,0 +1,124 @@
+name: Build and push to Quay.io
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag (e.g. v0.1.7)'
+        required: false
+        default: 'v0.1.7'
+        type: string
+
+env:
+  QUAY_REGISTRY: quay.io
+  QUAY_NAMESPACE: maximilianopizarro
+  IMAGE_TAG: ${{ github.event.inputs.image_tag || 'v0.1.7' }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Login to Quay.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.QUAY_REGISTRY }}
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+
+      - name: Login to registry.access.redhat.com
+        uses: docker/login-action@v3
+        with:
+          registry: registry.access.redhat.com
+          username: ${{ secrets.REDHAT_REGISTRY_USERNAME }}
+          password: ${{ secrets.REDHAT_REGISTRY_PASSWORD }}
+
+      - name: Login to registry.redhat.io
+        uses: docker/login-action@v3
+        with:
+          registry: registry.redhat.io
+          username: ${{ secrets.REDHAT_REGISTRY_USERNAME }}
+          password: ${{ secrets.REDHAT_REGISTRY_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push gateforge-backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.jvm
+          push: true
+          tags: |
+            ${{ env.QUAY_REGISTRY }}/${{ env.QUAY_NAMESPACE }}/gateforge-backend:latest
+            ${{ env.QUAY_REGISTRY }}/${{ env.QUAY_NAMESPACE }}/gateforge-backend:${{ env.IMAGE_TAG }}
+            ${{ env.QUAY_REGISTRY }}/${{ env.QUAY_NAMESPACE }}/gateforge-backend:${{ github.sha }}
+
+      - name: Build and push gateforge-frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile.ci
+          push: true
+          tags: |
+            ${{ env.QUAY_REGISTRY }}/${{ env.QUAY_NAMESPACE }}/gateforge-frontend:latest
+            ${{ env.QUAY_REGISTRY }}/${{ env.QUAY_NAMESPACE }}/gateforge-frontend:${{ env.IMAGE_TAG }}
+            ${{ env.QUAY_REGISTRY }}/${{ env.QUAY_NAMESPACE }}/gateforge-frontend:${{ github.sha }}
+
+      - name: Build and push gateforge-devhub-plugin
+        uses: docker/build-push-action@v6
+        with:
+          context: ./gateforge-devhub-plugin
+          file: ./gateforge-devhub-plugin/Dockerfile
+          push: true
+          tags: |
+            ${{ env.QUAY_REGISTRY }}/${{ env.QUAY_NAMESPACE }}/gateforge-devhub-plugin:latest
+            ${{ env.QUAY_REGISTRY }}/${{ env.QUAY_NAMESPACE }}/gateforge-devhub-plugin:${{ env.IMAGE_TAG }}
+            ${{ env.QUAY_REGISTRY }}/${{ env.QUAY_NAMESPACE }}/gateforge-devhub-plugin:${{ github.sha }}
+
+      - name: Build and push gateforge-devhub-frontend-plugin
+        uses: docker/build-push-action@v6
+        with:
+          context: ./gateforge-devhub-frontend
+          file: ./gateforge-devhub-frontend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.QUAY_REGISTRY }}/${{ env.QUAY_NAMESPACE }}/gateforge-devhub-frontend-plugin:latest
+            ${{ env.QUAY_REGISTRY }}/${{ env.QUAY_NAMESPACE }}/gateforge-devhub-frontend-plugin:${{ env.IMAGE_TAG }}
+            ${{ env.QUAY_REGISTRY }}/${{ env.QUAY_NAMESPACE }}/gateforge-devhub-frontend-plugin:${{ github.sha }}
+
+  publish-helm-chart:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Package Helm chart
+        run: |
+          helm package helm/gateforge --destination docs/
+
+      - name: Update Helm repo index
+        run: |
+          helm repo index docs/ --url https://maximilianopizarro.github.io/gateforge/
+
+      - name: Commit and push Helm chart
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/
+          git diff --staged --quiet || git commit -m "chore: update Helm chart package [skip ci]"
+          git push

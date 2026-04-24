@@ -7,6 +7,7 @@
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/gateforge)](https://artifacthub.io/packages/search?repo=gateforge)
 [![Quay.io Backend](https://img.shields.io/badge/quay.io-backend-blue)](https://quay.io/repository/maximilianopizarro/gateforge-backend)
 [![Quay.io Frontend](https://img.shields.io/badge/quay.io-frontend-blue)](https://quay.io/repository/maximilianopizarro/gateforge-frontend)
+[![Quay.io DevHub Frontend](https://img.shields.io/badge/quay.io-devhub--frontend-blue)](https://quay.io/repository/maximilianopizarro/gateforge-devhub-frontend-plugin)
 [![OpenShift](https://img.shields.io/badge/OpenShift-4.21-red)](https://docs.openshift.com/)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://maximilianopizarro.github.io/gateforge/)
 
@@ -27,6 +28,7 @@ AI-powered migration platform for transitioning from **Red Hat 3scale API Manage
 | **AI** | LangChain4j, deepseek-r1-distill-qwen-14b | Migration analysis, resource generation, chat assistant |
 | **MCP Servers** | 3scale, Connectivity Link, Kubernetes | Tool calling for AI agent via Model Context Protocol |
 | **Migration** | Fabric8 K8s Client | Generate HTTPRoute, AuthPolicy, RateLimitPolicy from 3scale configs |
+| **Developer Hub** | GateForge Plugin (backend + frontend) | Observability tabs, Policy Topology, Component editing, catalog enrichment |
 | **Packaging** | Helm Chart, Podman Compose | OpenShift deployment + local development |
 
 **Containers:** Backend uses `registry.access.redhat.com/ubi9/openjdk-17`. Frontend uses `registry.access.redhat.com/ubi9/nginx-124`. PostgreSQL uses `registry.redhat.io/rhel9/postgresql-15`.
@@ -47,6 +49,20 @@ AI-powered migration platform for transitioning from **Red Hat 3scale API Manage
 - **ArgoCD cluster secret auto-discovery** from `openshift-gitops` namespace
 - Per-cluster RBAC validation via `SelfSubjectAccessReview`
 - REST API for cluster management (`/api/cluster/targets`)
+
+### Phase 4: AI-Powered Analysis
+- **Context injection** (not RAG) — live cluster state is injected into each LLM prompt
+- **FAQ cache** with Data Grid (24h TTL) — 10 pre-defined prompts warmed at startup
+- **kuadrantctl integration** — 5 CLI commands for resource generation and topology
+- **Verification** — AI reviews generated resources post-generation for correctness
+
+### Phase 5: Developer Hub Integration
+- **Software Template Registration**: Components registered via standard RHDH Software Templates (`gateforge-register-component` / `gateforge-unregister-component`)
+- **Observability Tab**: Prometheus/Thanos metrics embedded in RHDH entity pages (request rate, error rate, latency percentiles)
+- **Policy Topology Tab**: Kuadrant policy DAG visualization (Gateway → HTTPRoute → policies → APIProduct → APIKey)
+- **Component Editor**: Inline editing for platformadmin (no repo required) — annotations, tags, description
+- **Pre-registration Editing**: Edit Component definition before catalog registration
+- **Catalog Enrichment**: `GateForgeKuadrantProcessor` enriches 3scale API entities with `kuadrant.io/*` annotations
 
 ### Phase 3: Hub-Spoke Architecture
 - **PostgreSQL persistence** for migration plans and audit entries (replaces in-memory storage)
@@ -169,6 +185,13 @@ helm install gateforge gateforge/gateforge \
 | /api/cluster/targets/{id} | DELETE | Remove a target cluster |
 | /api/cluster/targets/{id}/validate | GET | Validate RBAC access on target |
 
+### Developer Hub Integration APIs (Phase 5)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| /api/migration/plans/{id}/catalog-info/{product} | GET | Serve generated catalog-info.yaml for catalog:register |
+| /api/migration/plans/{id}/confirm-registration | POST | Confirm Component registration (with optional edits) |
+
 ### Hub-Spoke APIs (Phase 3)
 
 | Endpoint | Method | Description |
@@ -201,6 +224,8 @@ helm install gateforge gateforge/gateforge \
 | `connectivityLink.gatewayStrategy` | shared | shared / dual / dedicated |
 | `connectivityLink.gatewayClassName` | istio | Gateway class |
 | `rbac.clusterAdmin` | false | Use cluster-admin (dev only) vs least-privilege |
+| `developerHub.scaffolderUrl` | "" | RHDH Scaffolder API URL for Component registration |
+| `developerHub.scaffolderToken` | "" | Bearer token for Scaffolder API authentication |
 | `route.enabled` | true | Create OpenShift Route |
 
 ---

@@ -168,6 +168,7 @@
     .api-group-p1 { background: #e6f5e0; color: #2d6b24; }
     .api-group-p2 { background: #e0ecff; color: #0066cc; }
     .api-group-p3 { background: #fce4ec; color: #880e4f; }
+    .api-group-p5 { background: #e0f7fa; color: #006064; }
   </style>
 </head>
 <body>
@@ -186,6 +187,7 @@
       <a href="https://quay.io/repository/maximilianopizarro/gateforge-backend"><img src="https://img.shields.io/badge/quay.io-backend-blue" alt="Quay Backend"></a>
       <a href="https://quay.io/repository/maximilianopizarro/gateforge-frontend"><img src="https://img.shields.io/badge/quay.io-frontend-blue" alt="Quay Frontend"></a>
       <a href="https://quay.io/repository/maximilianopizarro/gateforge-devhub-plugin"><img src="https://img.shields.io/badge/quay.io-devhub--plugin-blue" alt="Quay DevHub Plugin"></a>
+      <a href="https://quay.io/repository/maximilianopizarro/gateforge-devhub-frontend-plugin"><img src="https://img.shields.io/badge/quay.io-devhub--frontend-blue" alt="Quay DevHub Frontend"></a>
       <img src="https://img.shields.io/badge/OpenShift-4.20%2B-red" alt="OpenShift 4.20+">
       <img src="https://img.shields.io/badge/License-Apache%202.0-green" alt="License">
     </div>
@@ -263,7 +265,12 @@
         <div class="phase-card">
           <span class="phase-badge" style="background:#e6f5e0;color:#2d6b24;">Developer Hub</span>
           <h4>GateForge DevHub Plugin</h4>
-          <p>Standalone webhook-based plugin deployed in Developer Hub namespace. Receives migration events and generates Backstage <code>Component</code> entities linked to Kuadrant API resources.</p>
+          <p>RHDH dynamic plugin with frontend tabs for Observability (Prometheus/Thanos metrics), Policy Topology (Kuadrant policy graph), and Component editing. Registration via Software Templates triggered by the GateForge backend.</p>
+        </div>
+        <div class="phase-card">
+          <span class="phase-badge" style="background:#e6f5e0;color:#2d6b24;">Developer Hub</span>
+          <h4>Software Template Registration</h4>
+          <p>Component registration and unregistration via standard RHDH Software Templates (gateforge-register-component / gateforge-unregister-component). Decoupled from plugin YAML processing. Pre-registration editing of Component definition.</p>
         </div>
       </div>
     </div>
@@ -383,7 +390,7 @@ graph TB
       BE["Backend\nQuarkus 3.x / Java 17"]
       PG[("PostgreSQL 15\n+ Flyway Migrations")]
       DG["Red Hat Data Grid\nInfinispan 15.x\nHot Rod Protocol"]
-      DHPLUGIN["GateForge DevHub Plugin\nExpress.js / Node.js"]
+      DHPLUGIN["GateForge DevHub Plugin\nBackend + Frontend"]
     end
 
     subgraph aieng["AI Engine"]
@@ -427,6 +434,7 @@ graph TB
       OTEL["OpenTelemetry\nOperator + Collector"]
       PROM["Prometheus\nServiceMonitor"]
       GRAF["Grafana\nDashboard"]
+      THANOS["Thanos Querier"]
     end
   end
 
@@ -453,8 +461,9 @@ graph TB
   BE ==>|apply CRDs| TP
   IST --> GW
   AP -.->|auth delegation| RHBK
-  BE -->|migration webhook| DHPLUGIN
-  DHPLUGIN --> RHDH
+  BE -->|Scaffolder API| RHDH
+  DHPLUGIN -->|Observability + Topology tabs| RHDH
+  DHPLUGIN -->|proxy metrics| THANOS
   ARGO -->|cluster secrets| BE
   MCK -.->|mock backends| HR
   BE -.->|Micrometer metrics| OTEL
@@ -508,23 +517,25 @@ sequenceDiagram
   participant Plugin3s as RHDH 3scale Plugin
   participant Catalog as RHDH Catalog
   participant GateForge as GateForge Backend
-  participant PluginGF as GateForge DevHub Plugin
+  participant Scaffolder as RHDH Scaffolder
   participant K8s as OpenShift Cluster
+  participant PluginGF as GateForge Frontend Plugin
+  participant THANOS as Thanos Querier
 
   Plugin3s->>ThreeScale: Poll products (every 5 min)
   ThreeScale-->>Plugin3s: Product list
   Plugin3s->>Catalog: Create/update API entities
-  Note over Catalog: API entities auto-discovered from 3scale
-
-  GateForge->>ThreeScale: Discover products + plans + credentials
-  GateForge->>GateForge: Generate resources (kuadrantctl + AI)
-  Note over GateForge: HTTPRoute + AuthPolicy + RateLimitPolicy + APIProduct + PlanPolicy + APIKey
 
   GateForge->>K8s: Apply Kuadrant resources
-  GateForge->>PluginGF: POST /migration-event (webhook)
-  PluginGF->>PluginGF: Build Component entity
-  PluginGF-->>GateForge: 200 accepted
-  Note over PluginGF: Component linked to Kuadrant resources via annotations
+  GateForge->>GateForge: Generate Component catalog-info.yaml
+  GateForge->>Scaffolder: POST /api/scaffolder/v2/tasks (gateforge-register-component)
+  Scaffolder->>Catalog: catalog:register (from GateForge URL)
+  Note over GateForge,Scaffolder: On timeout → error to user
+
+  PluginGF->>K8s: Fetch policies (AuthPolicy, RateLimitPolicy, etc.)
+  PluginGF->>PluginGF: Render Policy Topology tab
+  PluginGF->>THANOS: Proxy metrics query
+  PluginGF->>PluginGF: Render Observability tab
         </pre>
       </div>
 
@@ -669,6 +680,15 @@ sequenceDiagram
           <tr><td><code>/api/hub/topology</code></td><td>GET</td><td>Cluster + source topology graph</td></tr>
         </tbody>
       </table>
+
+      <h3 style="margin-top: 24px;"><span class="api-group-label api-group-p5">Phase 5</span> Developer Hub Integration</h3>
+      <table class="api-table">
+        <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>/api/migration/plans/{id}/catalog-info/{product}</code></td><td>GET</td><td>Serve generated catalog-info.yaml for catalog:register</td></tr>
+          <tr><td><code>/api/migration/plans/{id}/confirm-registration</code></td><td>POST</td><td>Confirm Component registration (with optional edits)</td></tr>
+        </tbody>
+      </table>
     </div>
   </section>
 
@@ -796,7 +816,8 @@ sequenceDiagram
           <tr><td><code>route.enabled</code></td><td>true</td><td>Create OpenShift Route</td></tr>
           <tr><td><code>developerHub.enabled</code></td><td>false</td><td>Enable Developer Hub catalog-info generation</td></tr>
           <tr><td><code>developerHub.url</code></td><td>""</td><td>Developer Hub URL for component registration</td></tr>
-          <tr><td><code>developerHub.pluginWebhookUrl</code></td><td>""</td><td>GateForge DevHub Plugin webhook URL</td></tr>
+          <tr><td><code>developerHub.scaffolderUrl</code></td><td>""</td><td>RHDH Scaffolder API URL for Component registration</td></tr>
+          <tr><td><code>developerHub.scaffolderToken</code></td><td>""</td><td>Bearer token for Scaffolder API authentication</td></tr>
           <tr><td><code>datagrid.enabled</code></td><td>true</td><td>Deploy Data Grid for caching</td></tr>
           <tr><td><code>datagrid.cacheTtlSeconds</code></td><td>3600</td><td>Cache TTL for 3scale products/backends</td></tr>
           <tr><td><code>observability.enabled</code></td><td>false</td><td>Enable OpenTelemetry + metrics export</td></tr>
@@ -804,6 +825,297 @@ sequenceDiagram
           <tr><td><code>observability.grafanaDashboard.enabled</code></td><td>false</td><td>Deploy Grafana dashboard ConfigMap</td></tr>
         </tbody>
       </table>
+    </div>
+  </section>
+
+  <section class="section" id="installation">
+    <div class="container">
+      <h2>Installation Guide</h2>
+      <p style="color:#6a6e73; margin-bottom:16px; max-width:800px;">
+        Deploy GateForge on OpenShift or run it locally for development. Ensure prerequisites are satisfied before installing the Helm chart.
+      </p>
+
+      <h3>Prerequisites</h3>
+      <ul style="color:#6a6e73; margin:12px 0 20px 20px; line-height:1.7;">
+        <li>OpenShift Container Platform <strong>4.20+</strong></li>
+        <li><strong>Kuadrant Operator</strong> (Red Hat Connectivity Link)</li>
+        <li><strong>3scale Operator</strong> (for CRD-based discovery, where used)</li>
+        <li><strong>Helm 3</strong></li>
+        <li><strong>kuadrantctl</strong> 0.10.x (bundled or installed where generation runs)</li>
+      </ul>
+
+      <h3>Quick start with Helm</h3>
+      <div class="install-block">
+        <span class="comment"># Add the GateForge chart repository</span><br>
+        <span class="cmd">helm repo add gateforge https://maximilianopizarro.github.io/gateforge/</span><br><br>
+        <span class="comment"># Install with required values</span><br>
+        <span class="cmd">helm install gateforge gateforge/gateforge \<br>
+        &nbsp; --set ai.apiKey=YOUR_KEY \<br>
+        &nbsp; --set threescale.adminApi.url=https://3scale-admin.example.com \<br>
+        &nbsp; --set threescale.adminApi.accessToken=TOKEN \<br>
+        &nbsp; --set clusterDomain=apps.cluster.example.com</span>
+      </div>
+
+      <h3>Podman Compose (local development)</h3>
+      <p style="color:#6a6e73; margin-bottom:12px;">From the repository root, build and start local dependencies and services:</p>
+      <div class="install-block">
+        <span class="cmd">podman-compose up -d --build</span>
+      </div>
+
+      <h3>Verify the deployment</h3>
+      <ul style="color:#6a6e73; margin:12px 0 0 20px; line-height:1.7;">
+        <li>Backend health: <code>GET /q/health</code> on the GateForge backend route or Service port</li>
+        <li>Frontend UI: served on port <strong>4200</strong> when running the dev stack locally</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section" style="background:#f5f5f5;" id="single-tenant">
+    <div class="container">
+      <h2>Configuration: Single-Tenant</h2>
+      <p style="color:#6a6e73; margin-bottom:16px; max-width:800px;">
+        Single-tenant mode uses one 3scale Admin API source and one target OpenShift cluster. This is the simplest production layout.
+      </p>
+
+      <h3>Key Helm values</h3>
+      <table class="arch-table">
+        <thead><tr><th>Value</th><th>Role</th></tr></thead>
+        <tbody>
+          <tr><td><code>threescale.adminApi.url</code></td><td>Base URL of the 3scale Admin Portal / Admin API</td></tr>
+          <tr><td><code>threescale.adminApi.accessToken</code></td><td>Personal access token for the Admin API</td></tr>
+          <tr><td><code>clusterDomain</code></td><td>Apps domain for the target cluster (for routes and defaults)</td></tr>
+          <tr><td><code>connectivityLink.targetNamespace</code></td><td>Namespace where Kuadrant / Gateway API resources are applied</td></tr>
+          <tr><td><code>connectivityLink.gatewayStrategy</code></td><td><code>shared</code> (recommended for most), <code>dual</code>, or <code>dedicated</code></td></tr>
+        </tbody>
+      </table>
+
+      <h3>Developer Hub integration</h3>
+      <p style="color:#6a6e73; margin:12px 0;">
+        Enable catalog registration and Scaffolder-driven workflows with <code>developerHub.enabled: true</code> and set <code>developerHub.scaffolderUrl</code> to your Red Hat Developer Hub Scaffolder API base URL (plus optional token values as documented in the chart).
+      </p>
+
+      <h3>Example <code>values.yaml</code> snippet</h3>
+      <div class="install-block">
+        <span class="cmd">ai:<br>
+        &nbsp; apiKey: YOUR_KEY<br>
+        &nbsp; endpoint: https://your-litellm-or-openai-compatible.example.com<br>
+        &nbsp; model: deepseek-r1-distill-qwen-14b<br>
+        threescale:<br>
+        &nbsp; adminApi:<br>
+        &nbsp;&nbsp; url: https://3scale-admin.example.com<br>
+        &nbsp;&nbsp; accessToken: TOKEN<br>
+        clusterDomain: apps.cluster.example.com<br>
+        connectivityLink:<br>
+        &nbsp; targetNamespace: gateforge-migrations<br>
+        &nbsp; gatewayStrategy: shared<br>
+        developerHub:<br>
+        &nbsp; enabled: true<br>
+        &nbsp; scaffolderUrl: https://developer-hub.example.com/api/scaffolder</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="multi-tenant">
+    <div class="container">
+      <h2>Configuration: Multi-Tenant</h2>
+      <p style="color:#6a6e73; margin-bottom:16px; max-width:800px;">
+        Multi-tenant (hub-spoke) deployments connect GateForge to <strong>multiple 3scale sources</strong> and <strong>multiple target clusters</strong>. The hub cluster runs GateForge with PostgreSQL persistence and Data Grid; audit and plan data can be federated across spokes.
+      </p>
+
+      <h3>Multiple 3scale sources</h3>
+      <p style="color:#6a6e73; margin-bottom:12px;">
+        Provide <code>threescale.sources</code> as a JSON array of source objects (id, label, admin URL, token, enabled flags). Each entry is discovered and listed independently in the UI and APIs.
+      </p>
+
+      <h3>Multiple target clusters</h3>
+      <p style="color:#6a6e73; margin-bottom:12px;">
+        Set <code>targetClusters</code> to a JSON array of cluster definitions (API server URL, token, labels, TLS options). Migrations can target any registered cluster from the wizard.
+      </p>
+
+      <h3>Argo CD cluster discovery</h3>
+      <p style="color:#6a6e73; margin-bottom:12px;">
+        With <code>argocd.clusterDiscovery: true</code>, GateForge discovers Argo CD cluster secrets and surfaces them as selectable targets without hard-coding kubeconfigs in values.
+      </p>
+
+      <h3>Persistence and audit</h3>
+      <p style="color:#6a6e73; margin-bottom:16px;">
+        Keep <code>postgresql.enabled: true</code> on the hub for durable migration plans. Federated audit APIs aggregate events across clusters for compliance and troubleshooting.
+      </p>
+
+      <div class="mermaid-wrapper" onclick="openMermaidLightbox(this)">
+        <h3>Hub-spoke architecture</h3>
+        <span class="zoom-hint-diagram">Click to enlarge</span>
+        <pre class="mermaid">
+flowchart TB
+  subgraph Hub["Hub cluster"]
+    GF["GateForge\n(Backend + Frontend)"]
+    PG[("PostgreSQL\nplans + audit")]
+    DG["Red Hat Data Grid\nFAQ + product cache"]
+  end
+
+  subgraph Sources["Multiple 3scale sources"]
+    S1["3scale instance A\nAdmin API + CRDs"]
+    S2["3scale instance B\nAdmin API + CRDs"]
+    S3["3scale instance N\n..."]
+  end
+
+  subgraph Targets["Target clusters"]
+    C1["OpenShift cluster 1\nConnectivity Link"]
+    C2["OpenShift cluster 2\nConnectivity Link"]
+    CN["OpenShift cluster N\n..."]
+  end
+
+  GF --> PG
+  GF --> DG
+  GF --> S1
+  GF --> S2
+  GF --> S3
+  GF --> C1
+  GF --> C2
+  GF --> CN
+
+  style Hub fill:#fce4ec,stroke:#c62828,stroke-width:2px
+  style Sources fill:#fff3e0,stroke:#e65100,stroke-width:1px
+  style Targets fill:#e8f5e9,stroke:#2e7d32,stroke-width:1px
+        </pre>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" style="background:#f5f5f5;" id="ai-config">
+    <div class="container">
+      <h2>AI Model Configuration</h2>
+      <p style="color:#6a6e73; margin-bottom:16px; max-width:800px;">
+        GateForge talks to <strong>any OpenAI-compatible endpoint</strong> through LiteLLM (or a compatible proxy). The default chart model name (<code>deepseek-r1-distill-qwen-14b</code>) is a sensible starting point but is <strong>not mandatory</strong>—point <code>ai.endpoint</code> and <code>ai.model</code> at whatever serving stack you run.
+      </p>
+
+      <h3>Configuration properties</h3>
+      <table class="arch-table">
+        <thead><tr><th>Property</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>ai.endpoint</code></td><td>Base URL for chat completions (OpenAI-compatible)</td></tr>
+          <tr><td><code>ai.model</code></td><td>Model id as understood by the upstream server</td></tr>
+          <tr><td><code>ai.apiKey</code></td><td>Bearer token or API key required by the endpoint</td></tr>
+          <tr><td><code>ai.temperature</code></td><td>Sampling temperature for completions</td></tr>
+          <tr><td><code>ai.maxTokens</code></td><td>Upper bound on generated tokens per response</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Recommended models</h3>
+      <table class="compat-table">
+        <thead><tr><th>Model</th><th>Provider</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>deepseek-r1-distill-qwen-14b</td><td>LiteLLM / vLLM</td><td>Default in chart. Strong reasoning for migration questions.</td></tr>
+          <tr><td>qwen2.5-coder-7b-instruct</td><td>vLLM / Ollama</td><td>Lighter and fast; good for interactive chat.</td></tr>
+          <tr><td>llama-3.1-8b-instruct</td><td>vLLM / Ollama</td><td>General-purpose instruct model.</td></tr>
+          <tr><td>granite-3.1-8b-instruct</td><td>IBM / RHEL AI</td><td>Aligned with Red Hat AI on RHEL OpenShift.</td></tr>
+          <tr><td>mistral-7b-instruct-v0.3</td><td>vLLM / Ollama</td><td>Balanced quality and footprint.</td></tr>
+          <tr><td>GPT-4o, Claude, etc.</td><td>OpenAI / Anthropic</td><td>Via LiteLLM proxy; typically best quality if budget allows.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Examples: Ollama and vLLM on OpenShift</h3>
+      <p style="color:#6a6e73; margin-bottom:8px;"><strong>Ollama</strong> (in-cluster Service exposing OpenAI-compatible API):</p>
+      <div class="install-block">
+        <span class="cmd">ai:<br>
+        &nbsp; endpoint: http://ollama.your-namespace.svc.cluster.local:11434/v1<br>
+        &nbsp; model: llama3.1<br>
+        &nbsp; apiKey: ""</span>
+      </div>
+      <p style="color:#6a6e73; margin:16px 0 8px;"><strong>vLLM</strong> (OpenAI-compatible server fronted by a Route or Service):</p>
+      <div class="install-block">
+        <span class="cmd">ai:<br>
+        &nbsp; endpoint: https://vllm-openai.apps.cluster.example.com/v1<br>
+        &nbsp; model: qwen2.5-coder-7b-instruct<br>
+        &nbsp; apiKey: YOUR_VLLM_TOKEN</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="ai-flow">
+    <div class="container">
+      <h2>AI-Powered Analysis Flow</h2>
+      <p style="color:#6a6e73; margin-bottom:16px; max-width:800px;">
+        The assistant uses <strong>context injection plus a single chat completion</strong> (and tool calls where enabled). It is <strong>not</strong> a RAG pipeline: there are no vector stores or embedding indexes in the request path for these answers.
+      </p>
+
+      <div class="mermaid-wrapper" onclick="openMermaidLightbox(this)">
+        <h3>Chat request path</h3>
+        <span class="zoom-hint-diagram">Click to enlarge</span>
+        <pre class="mermaid">
+flowchart LR
+  A["User POST /api/chat"] --> B["Normalize input"]
+  B --> C{"FAQ cache hit?\n(Data Grid)"}
+  C -->|Yes| R["Return cached answer"]
+  C -->|No| D["Build context:\n3scale products,\ncluster status,\nkuadrantctl version"]
+  D --> E["Inject context\ninto user message"]
+  E --> F["LLM chat completion\n(OpenAI-compatible)"]
+  F --> G["Strip &lt;redacted_thinking&gt; blocks\nfrom reasoning models"]
+  G --> H["Response to client"]
+
+  style C fill:#e3f2fd,stroke:#1565c0
+  style F fill:#fff3e0,stroke:#e65100
+        </pre>
+      </div>
+
+      <h3>Design decisions</h3>
+      <ul style="color:#6a6e73; margin:12px 0 0 20px; line-height:1.7;">
+        <li><strong>No vector store or embeddings</strong> for this chat path—context is assembled from live services and cached key-value data.</li>
+        <li><strong>FAQ warmup:</strong> <strong>10</strong> pre-defined prompts are sent at startup; answers are stored in Data Grid with a <strong>24-hour TTL</strong> for fast repeated questions.</li>
+        <li><strong>MigrationAgent system prompt</strong> includes concrete mapping examples from 3scale to Connectivity Link.</li>
+        <li><strong>AI verification</strong> runs after YAML / resource generation to review the plan.</li>
+        <li>Reasoning models may emit <code>&lt;redacted_thinking&gt;...&lt;/redacted_thinking&gt;</code> blocks; these are <strong>stripped</strong> before the user sees the answer.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section" style="background:#f5f5f5;" id="kuadrantctl">
+    <div class="container">
+      <h2>kuadrantctl Primitives</h2>
+      <p style="color:#6a6e73; margin-bottom:16px; max-width:800px;">
+        GateForge shells out to <strong>kuadrantctl</strong> for OpenAPI-driven generation. The table below lists the commands the platform uses or relates to; the migration pipeline primarily relies on HTTPRoute generation, with policies often produced in Java.
+      </p>
+
+      <table class="arch-table">
+        <thead><tr><th>Command</th><th>Purpose</th><th>Input</th><th>Output</th></tr></thead>
+        <tbody>
+          <tr><td><code>kuadrantctl generate gatewayapi httproute --oas -</code></td><td>Generate HTTPRoute</td><td>OpenAPI YAML on stdin</td><td>HTTPRoute YAML</td></tr>
+          <tr><td><code>kuadrantctl generate kuadrant authpolicy --oas -</code></td><td>Generate AuthPolicy</td><td>OpenAPI YAML on stdin</td><td>AuthPolicy YAML</td></tr>
+          <tr><td><code>kuadrantctl generate kuadrant ratelimitpolicy --oas -</code></td><td>Generate RateLimitPolicy</td><td>OpenAPI YAML on stdin</td><td>RateLimitPolicy YAML</td></tr>
+          <tr><td><code>kuadrantctl topology -n {namespace}</code></td><td>Show policy topology</td><td>Namespace</td><td>Topology text</td></tr>
+          <tr><td><code>kuadrantctl version</code></td><td>Check CLI version</td><td>—</td><td>Version string</td></tr>
+        </tbody>
+      </table>
+
+      <div class="mermaid-wrapper" onclick="openMermaidLightbox(this)">
+        <h3>kuadrantctl in the migration pipeline</h3>
+        <span class="zoom-hint-diagram">Click to enlarge</span>
+        <pre class="mermaid">
+flowchart TD
+  OAS["OpenAPI spec\n(fetched or synthetic)"] --> KH["kuadrantctl generate\nhttproute --oas -"]
+  KH -->|success| PP["Post-process:\nnamespace, gateway, labels"]
+  KH -->|failure| FB["Fallback:\nJava template generation"]
+  PP --> RL{"Rules &gt; 16?\nGateway API limit"}
+  RL -->|yes| CO["Consolidate\nprefix matches"]
+  RL -->|no| JV["Java builds\nAuthPolicy + RateLimitPolicy"]
+  CO --> JV
+  FB --> JV
+  JV --> AI["AI verification\nof generated plan"]
+
+  style KH fill:#e3f2fd,stroke:#1565c0
+  style JV fill:#fff3e0,stroke:#e65100
+  style FB fill:#ffebee,stroke:#c62828
+        </pre>
+      </div>
+
+      <div class="phase-section">
+        <h3>Important notes</h3>
+        <ul style="color:#6a6e73; margin:0 0 0 20px; line-height:1.7;">
+          <li>Only <strong>HTTPRoute generation</strong> via kuadrantctl is on the main migration path; <strong>AuthPolicy</strong> and <strong>RateLimitPolicy</strong> are typically <strong>built in Java</strong> for consistency with your cluster defaults.</li>
+          <li>Gateway API limits HTTPRoute matches to <strong>16 rules</strong>; GateForge consolidates excess rules into prefix-style matches when needed.</li>
+          <li>If kuadrantctl exits with an error, the backend <strong>falls back</strong> to improved Java-based generation so migrations can continue.</li>
+        </ul>
+      </div>
     </div>
   </section>
 
@@ -826,6 +1138,12 @@ sequenceDiagram
   <footer class="site-footer">
     <div class="container">
       <div class="links">
+        <a href="#installation">Install</a>
+        <a href="#single-tenant">Single-tenant</a>
+        <a href="#multi-tenant">Multi-tenant</a>
+        <a href="#ai-config">AI config</a>
+        <a href="#ai-flow">AI flow</a>
+        <a href="#kuadrantctl">kuadrantctl</a>
         <a href="https://github.com/maximilianoPizarro/gateforge">GitHub</a>
         <a href="https://quay.io/repository/maximilianopizarro/gateforge-backend">Quay.io Backend</a>
         <a href="https://quay.io/repository/maximilianopizarro/gateforge-frontend">Quay.io Frontend</a>

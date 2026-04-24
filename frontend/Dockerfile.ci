@@ -1,0 +1,13 @@
+FROM registry.access.redhat.com/ubi9/nodejs-20:latest AS builder
+USER 0
+WORKDIR /opt/app-root/src
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build -- --configuration production
+
+FROM registry.access.redhat.com/ubi9/nginx-124:1
+COPY --from=builder /opt/app-root/src/dist/frontend/browser/ /opt/app-root/src/
+COPY nginx.conf "${NGINX_CONF_PATH}"
+EXPOSE 8080
+CMD ["nginx", "-g", "daemon off;"]
