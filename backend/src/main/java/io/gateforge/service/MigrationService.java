@@ -620,16 +620,24 @@ public class MigrationService {
 
         String sysName = productName.toLowerCase().replaceAll("[^a-z0-9-]", "-");
         String componentName = sysName.endsWith(componentSuffix) ? sysName : sysName + componentSuffix;
-        String routeName = sysName + "-route";
+
+        String baseName = sysName.endsWith(componentSuffix)
+                ? sysName.substring(0, sysName.length() - componentSuffix.length())
+                : sysName;
+
+        String routeName = baseName + "-route";
         String namespace = plan.resources().stream()
                 .filter(r -> "HTTPRoute".equals(r.kind()) && r.name().equals(routeName))
                 .findFirst().map(MigrationPlan.GeneratedResource::namespace).orElse(gatewayNamespace);
-        String hostname = sysName + "." + clusterDomain;
+        String hostname = baseName + "." + clusterDomain;
         String apiProductName = plan.resources().stream()
-                .filter(r -> "APIProduct".equals(r.kind()) && r.name().equals(sysName))
-                .findFirst().map(MigrationPlan.GeneratedResource::name).orElse(sysName);
+                .filter(r -> "APIProduct".equals(r.kind()))
+                .findFirst().map(MigrationPlan.GeneratedResource::name).orElse(baseName);
+        String apiProductNamespace = plan.resources().stream()
+                .filter(r -> "APIProduct".equals(r.kind()))
+                .findFirst().map(MigrationPlan.GeneratedResource::namespace).orElse(namespace);
 
-        String desc = sysName;
+        String desc = baseName;
         String gfUrl = developerHubUrl.equals("none") ? "https://gateforge." + clusterDomain : developerHubUrl;
 
         return """
@@ -662,8 +670,8 @@ public class MigrationService {
                   system: gateforge-migrated-apis
                   providesApis:
                     - %s
-                """.formatted(componentName, desc, namespace, routeName, apiProductName, namespace,
-                sysName, sysName, hostname, gfUrl, sysName);
+                """.formatted(componentName, desc, apiProductNamespace, routeName, apiProductName, apiProductNamespace,
+                baseName, baseName, hostname, gfUrl, baseName);
     }
 
     public List<Map<String, String>> generateTestCommands(String planId) {
