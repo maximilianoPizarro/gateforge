@@ -109,6 +109,17 @@ public class ThreeScaleService {
 
         productsLock.lock();
         try {
+            try {
+                RemoteCache<String, String> cache2 = getOrCreateCache(PRODUCTS_CACHE);
+                if (cache2 != null) {
+                    String cached2 = cache2.get(CACHE_KEY);
+                    if (cached2 != null) {
+                        LOG.info("Products served from Data Grid cache (after lock)");
+                        return objectMapper.readValue(cached2, new TypeReference<List<ThreeScaleProduct>>() {});
+                    }
+                }
+            } catch (Exception ignored) {}
+
             long start = System.currentTimeMillis();
             List<ThreeScaleProduct> result = loadProducts();
             long elapsed = System.currentTimeMillis() - start;
@@ -212,6 +223,17 @@ public class ThreeScaleService {
 
         backendsLock.lock();
         try {
+            try {
+                RemoteCache<String, String> cache2 = getOrCreateCache(BACKENDS_CACHE);
+                if (cache2 != null) {
+                    String cached2 = cache2.get(CACHE_KEY);
+                    if (cached2 != null) {
+                        LOG.info("Backends served from Data Grid cache (after lock)");
+                        return objectMapper.readValue(cached2, new TypeReference<List<Map<String, Object>>>() {});
+                    }
+                }
+            } catch (Exception ignored) {}
+
             long start = System.currentTimeMillis();
             List<Map<String, Object>> result = loadBackendsCombined();
             long elapsed = System.currentTimeMillis() - start;
