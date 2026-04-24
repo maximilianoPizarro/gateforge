@@ -51,6 +51,9 @@ public class MigrationResource {
     @ConfigProperty(name = "gateforge.cluster-domain", defaultValue = "apps.cluster.example.com")
     String clusterDomain;
 
+    @ConfigProperty(name = "gateforge.developer-hub.component-suffix", defaultValue = "-product")
+    String componentSuffix;
+
     private final HttpClient scaffolderClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10)).build();
 
@@ -240,12 +243,13 @@ public class MigrationResource {
 
         for (String productName : plan.sourceProducts()) {
             String sysName = productName.toLowerCase().replaceAll("[^a-z0-9-]", "-");
+            String compName = sysName.endsWith(componentSuffix) ? sysName : sysName + componentSuffix;
             try {
                 triggerScaffolderTemplate("gateforge-unregister-component", Map.of(
-                        "componentName", sysName + "-product"
+                        "componentName", compName
                 ));
             } catch (Exception e) {
-                LOG.warnf("Failed to unregister component %s-product: %s", sysName, e.getMessage());
+                LOG.warnf("Failed to unregister component %s: %s", compName, e.getMessage());
             }
         }
 
@@ -316,6 +320,7 @@ public class MigrationResource {
 
         for (String productName : plan.sourceProducts()) {
             String sysName = productName.toLowerCase().replaceAll("[^a-z0-9-]", "-");
+            String compName = sysName.endsWith(componentSuffix) ? sysName : sysName + componentSuffix;
             String namespace = plan.resources().stream()
                     .filter(r -> "HTTPRoute".equals(r.kind()))
                     .findFirst().map(MigrationPlan.GeneratedResource::namespace).orElse("default");
@@ -323,7 +328,7 @@ public class MigrationResource {
             triggerScaffolderTemplate("gateforge-register-component", Map.of(
                     "planId", id,
                     "productName", sysName,
-                    "componentName", sysName + "-product",
+                    "componentName", compName,
                     "namespace", namespace,
                     "owner", "group:default/3scale",
                     "clusterDomain", clusterDomain

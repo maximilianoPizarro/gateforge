@@ -45,7 +45,7 @@ import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
             <a href="https://maximilianopizarro.github.io/gateforge/" target="_blank">GateForge Docs</a>
             <a href="https://github.com/maximilianoPizarro/gateforge" target="_blank">GitHub</a>
           </div>
-          <p class="copyright">GateForge &copy; 2026 Maximiliano Pizarro &mdash; Apache 2.0 License</p>
+          <p class="copyright">GateForge v0.1.7 &copy; 2026 Maximiliano Pizarro &mdash; Apache 2.0 License</p>
         </div>
       </div>
     </footer>

@@ -65,6 +65,9 @@ public class MigrationService {
     @ConfigProperty(name = "gateforge.developer-hub.url", defaultValue = "none")
     String developerHubUrl;
 
+    @ConfigProperty(name = "gateforge.developer-hub.component-suffix", defaultValue = "-product")
+    String componentSuffix;
+
     @ConfigProperty(name = "gateforge.observability.enabled", defaultValue = "false")
     boolean observabilityEnabled;
 
@@ -616,6 +619,7 @@ public class MigrationService {
         if (plan == null) return null;
 
         String sysName = productName.toLowerCase().replaceAll("[^a-z0-9-]", "-");
+        String componentName = sysName.endsWith(componentSuffix) ? sysName : sysName + componentSuffix;
         String routeName = sysName + "-route";
         String namespace = plan.resources().stream()
                 .filter(r -> "HTTPRoute".equals(r.kind()) && r.name().equals(routeName))
@@ -632,7 +636,7 @@ public class MigrationService {
                 apiVersion: backstage.io/v1alpha1
                 kind: Component
                 metadata:
-                  name: %s-product
+                  name: %s
                   namespace: default
                   description: "%s — migrated from 3scale to Connectivity Link by GateForge"
                   annotations:
@@ -658,7 +662,7 @@ public class MigrationService {
                   system: gateforge-migrated-apis
                   providesApis:
                     - %s
-                """.formatted(sysName, desc, namespace, routeName, apiProductName, namespace,
+                """.formatted(componentName, desc, namespace, routeName, apiProductName, namespace,
                 sysName, sysName, hostname, gfUrl, sysName);
     }
 

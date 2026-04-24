@@ -210,6 +210,11 @@
         "scaffolderToken": {
           "type": "string",
           "description": "Bearer token for Scaffolder API authentication"
+        },
+        "componentSuffix": {
+          "type": "string",
+          "default": "-product",
+          "description": "Suffix appended to the 3scale product name to form the Component entity name in Developer Hub"
         }
       }
     },

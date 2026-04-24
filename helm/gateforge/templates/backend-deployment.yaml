@@ -63,6 +63,8 @@ spec:
               value: {{ .Values.developerHub.scaffolderUrl | default "" | quote }}
             - name: DEVHUB_SCAFFOLDER_TOKEN
               value: {{ .Values.developerHub.scaffolderToken | default "" | quote }}
+            - name: DEVHUB_COMPONENT_SUFFIX
+              value: {{ .Values.developerHub.componentSuffix | default "-product" | quote }}
             - name: THREESCALE_SOURCES
               value: {{ .Values.threescale.sources | default "" | quote }}
             - name: TARGET_CLUSTERS
