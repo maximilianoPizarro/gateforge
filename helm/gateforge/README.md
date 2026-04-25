@@ -66,9 +66,9 @@ helm install gateforge gateforge/gateforge \
 | Value | Default | Description |
 |-------|---------|-------------|
 | `backend.image.repository` | `quay.io/maximilianopizarro/gateforge-backend` | Backend image |
-| `backend.image.tag` | `latest` | Backend image tag |
+| `backend.image.tag` | `v0.1.7` | Backend image tag |
 | `frontend.image.repository` | `quay.io/maximilianopizarro/gateforge-frontend` | Frontend image |
-| `frontend.image.tag` | `latest` | Frontend image tag |
+| `frontend.image.tag` | `v0.1.7` | Frontend image tag |
 | `ai.enabled` | `true` | Enable AI features |
 | `ai.endpoint` | `https://litellm-prod.apps.maas.redhatworkshops.io/v1` | LLM endpoint URL |
 | `ai.model` | `deepseek-r1-distill-qwen-14b` | AI model name |

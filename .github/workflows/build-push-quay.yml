@@ -14,7 +14,6 @@ on:
 env:
   QUAY_REGISTRY: quay.io
   QUAY_NAMESPACE: maximilianopizarro
-  IMAGE_TAG: ${{ github.event.inputs.image_tag || 'v0.1.7' }}
 
 jobs:
   build-and-push:
@@ -22,6 +21,17 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Resolve image tag
+        run: |
+          # Chart 0.1.7: default image tag v0.1.7 (override via workflow_dispatch).
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.image_tag }}"
+            if [ -z "$TAG" ]; then TAG=v0.1.7; fi
+            echo "IMAGE_TAG=$TAG" >> "$GITHUB_ENV"
+          else
+            echo "IMAGE_TAG=v0.1.7" >> "$GITHUB_ENV"
+          fi
 
       - name: Login to Quay.io
         uses: docker/login-action@v3

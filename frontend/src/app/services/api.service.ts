@@ -85,6 +85,15 @@ export interface MigrationPlan {
   status?: string;
   targetClusterId?: string;
   targetClusterLabel?: string;
+  consolidationWarnings?: string[];
+}
+
+export interface DriftEntry {
+  kind: string;
+  name: string;
+  namespace: string;
+  status: 'in-sync' | 'missing' | 'error';
+  message?: string;
 }
 
 export interface BulkRevertResult {
@@ -177,6 +186,10 @@ export class ApiService {
 
   getPlans(): Observable<MigrationPlan[]> {
     return this.http.get<MigrationPlan[]>(`${this.baseUrl}/migration/plans`);
+  }
+
+  checkDrift(planId: string): Observable<DriftEntry[]> {
+    return this.http.get<DriftEntry[]>(`${this.baseUrl}/migration/plans/${planId}/drift`);
   }
 
   getAuditLog(): Observable<AuditEntry[]> {

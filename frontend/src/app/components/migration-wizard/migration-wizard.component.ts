@@ -2,7 +2,8 @@ import { Component, CUSTOM_ELEMENTS_SCHEMA, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult, FeatureFlags, BulkRevertResult, TestCommand, TargetCluster } from '../../services/api.service';
+import JSZip from 'jszip';
+import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult, FeatureFlags, BulkRevertResult, TestCommand, TargetCluster, DriftEntry } from '../../services/api.service';
 
 @Component({
   selector: 'app-migration-wizard',
@@ -152,6 +153,22 @@ import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult, FeatureFlags
           </div>
         </div>
 
+        <div *ngIf="plan.aiAnalysis" class="ai-analysis-panel">
+          <div class="ai-analysis-header">
+            <h3>AI Pre-Migration Analysis</h3>
+          </div>
+          <div class="ai-analysis-body">
+            <pre class="ai-analysis-content">{{ plan.aiAnalysis }}</pre>
+          </div>
+        </div>
+
+        <div *ngIf="plan.consolidationWarnings && plan.consolidationWarnings.length > 0" class="consolidation-warnings">
+          <div *ngFor="let warning of plan.consolidationWarnings" class="consolidation-warning">
+            <span class="warning-icon">&#9888;</span>
+            <span>{{ warning }}</span>
+          </div>
+        </div>
+
         <div class="resources-grid">
           <div *ngFor="let res of plan.resources; let idx = index"
                class="resource-card card"
@@ -293,6 +310,9 @@ import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult, FeatureFlags
 
         <div class="actions">
           <button type="button" class="btn-secondary" (click)="step = 2">Back</button>
+          <button type="button" class="btn-secondary" (click)="downloadAllYaml()">
+            Download All YAML
+          </button>
           <button type="button" class="btn-apply" (click)="applyMigration()" [disabled]="applying || !!applyResult || !!revertResult">
             {{ applying ? 'Applying…' : (applyResult ? 'Applied' : 'Apply to Cluster') }}
           </button>
@@ -330,17 +350,34 @@ import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult, FeatureFlags
               </button>
             </div>
             <div class="history-list">
-              <div *ngFor="let p of allPlans" class="history-row card" [class.reverted]="p.status === 'REVERTED'">
-                <input type="checkbox" [checked]="planSelection[p.id]" (change)="togglePlanSelection(p.id)"
-                       [disabled]="p.status === 'REVERTED'">
-                <div class="history-info">
-                  <span class="history-id">{{ p.id }}</span>
-                  <span class="pill pill-strategy">{{ p.gatewayStrategy }}</span>
-                  <span class="pill pill-muted">{{ p.sourceProducts.join(', ') }}</span>
+              <div *ngFor="let p of allPlans" class="history-row-wrap">
+                <div class="history-row card" [class.reverted]="p.status === 'REVERTED'">
+                  <input type="checkbox" [checked]="planSelection[p.id]" (change)="togglePlanSelection(p.id)"
+                         [disabled]="p.status === 'REVERTED'">
+                  <div class="history-info">
+                    <span class="history-id">{{ p.id }}</span>
+                    <span class="pill pill-strategy">{{ p.gatewayStrategy }}</span>
+                    <span class="pill pill-muted">{{ p.sourceProducts.join(', ') }}</span>
+                  </div>
+                  <span class="badge" [class.badge-active]="p.status === 'ACTIVE'" [class.badge-reverted]="p.status === 'REVERTED'">
+                    {{ p.status || 'ACTIVE' }}
+                  </span>
+                  <button type="button" class="btn-drift"
+                          (click)="checkDrift(p.id); $event.stopPropagation()"
+                          [disabled]="driftLoading[p.id] || p.status === 'REVERTED'"
+                          *ngIf="p.status !== 'REVERTED'">
+                    {{ driftLoading[p.id] ? 'Checking…' : 'Check Status' }}
+                  </button>
                 </div>
-                <span class="badge" [class.badge-active]="p.status === 'ACTIVE'" [class.badge-reverted]="p.status === 'REVERTED'">
-                  {{ p.status || 'ACTIVE' }}
-                </span>
+                <div *ngIf="driftResults[p.id]" class="drift-results">
+                  <div *ngFor="let d of driftResults[p.id]" class="drift-row" [class.drift-ok]="d.status === 'in-sync'" [class.drift-miss]="d.status === 'missing'" [class.drift-err]="d.status === 'error'">
+                    <span class="badge badge-kind">{{ d.kind }}</span>
+                    <span class="drift-name">{{ d.name }}</span>
+                    <span class="drift-badge" [class.drift-badge-ok]="d.status === 'in-sync'" [class.drift-badge-miss]="d.status === 'missing'" [class.drift-badge-err]="d.status === 'error'">
+                      {{ d.status }}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
             <div *ngIf="bulkResult" class="apply-result" [class.success]="bulkResult.totalFailed === 0" [class.partial]="bulkResult.totalFailed > 0">
@@ -608,6 +645,56 @@ import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult, FeatureFlags
     .banner-meta { display: flex; flex-wrap: wrap; gap: 8px; }
     .pill-strategy { background: white; border-color: #0066cc; color: #0066cc; font-weight: 600; }
     .pill-muted { background: white; color: #6a6e73; }
+    .ai-analysis-panel {
+      border: 1px solid #d2d2d2;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 22px;
+      background: white;
+    }
+    .ai-analysis-header {
+      background: linear-gradient(135deg, #e8eaf6 0%, #c5cae9 100%);
+      padding: 14px 20px;
+    }
+    .ai-analysis-header h3 {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #283593;
+    }
+    .ai-analysis-body {
+      padding: 16px 20px;
+    }
+    .ai-analysis-content {
+      margin: 0;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      font-size: 0.88rem;
+      line-height: 1.6;
+      color: #151515;
+      font-family: 'Red Hat Text', sans-serif;
+    }
+    .consolidation-warnings {
+      margin-bottom: 22px;
+    }
+    .consolidation-warning {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      background: #fef3cd;
+      border: 1px solid #d4a017;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 8px;
+      font-size: 0.88rem;
+      color: #6a4e00;
+      line-height: 1.5;
+    }
+    .warning-icon {
+      font-size: 1.1rem;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
     .resources-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
@@ -880,7 +967,42 @@ import { ApiService, ThreeScaleProduct, MigrationPlan, ApplyResult, FeatureFlags
     }
     .btn-bulk-revert:hover:not(:disabled) { background: #a30000; }
     .btn-bulk-revert:disabled { opacity: 0.5; cursor: not-allowed; }
-    .history-list { display: flex; flex-direction: column; gap: 8px; }
+    .history-list { display: flex; flex-direction: column; gap: 0; }
+    .history-row-wrap { margin-bottom: 8px; }
+    .btn-drift {
+      padding: 5px 14px; border-radius: 4px; font-size: 0.78rem; font-weight: 600;
+      cursor: pointer; background: #e0ecff; color: #0066cc; border: 1px solid #0066cc;
+      font-family: inherit; white-space: nowrap;
+    }
+    .btn-drift:hover:not(:disabled) { background: #0066cc; color: white; }
+    .btn-drift:disabled { opacity: 0.5; cursor: not-allowed; }
+    .drift-results {
+      padding: 8px 16px 12px;
+      background: #fafafa;
+      border: 1px solid #d2d2d2;
+      border-top: none;
+      border-radius: 0 0 8px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .drift-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.85rem;
+      padding: 4px 0;
+    }
+    .drift-name { flex: 1; font-weight: 500; }
+    .drift-badge {
+      padding: 2px 10px;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 600;
+    }
+    .drift-badge-ok { background: #e6f5e0; color: #2d6b24; }
+    .drift-badge-miss { background: #fef3cd; color: #8a5500; }
+    .drift-badge-err { background: #fce4ec; color: #c9190b; }
     .history-row {
       display: flex; align-items: center; gap: 12px; padding: 12px 16px;
     }
@@ -978,6 +1100,8 @@ export class MigrationWizardComponent implements OnInit {
   deleteGateway = false;
   bulkReverting = false;
   bulkResult: BulkRevertResult | null = null;
+  driftResults: Record<string, DriftEntry[]> = {};
+  driftLoading: Record<string, boolean> = {};
   productSearchQuery = '';
   migrateProductPage = 1;
   migratePageSize = 24;
@@ -1253,5 +1377,61 @@ export class MigrationWizardComponent implements OnInit {
         this.bulkReverting = false;
       }
     });
+  }
+
+  checkDrift(planId: string): void {
+    this.driftLoading = { ...this.driftLoading, [planId]: true };
+    this.api.checkDrift(planId).subscribe({
+      next: (results) => {
+        this.driftResults = { ...this.driftResults, [planId]: results };
+        this.driftLoading = { ...this.driftLoading, [planId]: false };
+      },
+      error: () => {
+        this.driftLoading = { ...this.driftLoading, [planId]: false };
+      }
+    });
+  }
+
+  async downloadAllYaml(): Promise<void> {
+    if (!this.plan) return;
+    const zip = new JSZip();
+    const folder = zip.folder(`gateforge-plan-${this.plan.id}`);
+    if (!folder) return;
+
+    const kindOrder: Record<string, number> = {
+      Gateway: 0, HTTPRoute: 1, AuthPolicy: 2, RateLimitPolicy: 3,
+      PlanPolicy: 4, APIProduct: 5, APIKey: 6, TelemetryPolicy: 7, Route: 8
+    };
+
+    const sorted = [...this.plan.resources].sort((a, b) =>
+      (kindOrder[a.kind] ?? 99) - (kindOrder[b.kind] ?? 99)
+    );
+
+    const resources: string[] = [];
+    sorted.forEach((res, idx) => {
+      const yaml = this.editedYamls[this.plan!.resources.indexOf(res)] || res.yaml;
+      const prefix = String(idx).padStart(2, '0');
+      const safeName = res.name.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+      const filename = `${prefix}-${res.kind.toLowerCase()}-${safeName}.yaml`;
+      folder.file(filename, yaml);
+      resources.push(filename);
+    });
+
+    if (this.plan.catalogInfoYaml) {
+      const catalogYaml = this.editedComponentYaml || this.plan.catalogInfoYaml;
+      folder.file('catalog-info.yaml', catalogYaml);
+      resources.push('catalog-info.yaml');
+    }
+
+    const kustomization = `apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n${resources.map(r => '  - ' + r).join('\n')}\n`;
+    folder.file('kustomization.yaml', kustomization);
+
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `gateforge-plan-${this.plan.id}.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 }

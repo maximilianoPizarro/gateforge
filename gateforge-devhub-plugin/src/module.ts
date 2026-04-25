@@ -20,9 +20,13 @@ export const catalogModuleGateforge = createBackendModule({
         const processor = new GateForgeKuadrantProcessor(logger);
         catalog.addProcessor(processor);
 
-        const router = createRouter({ logger });
+        const router = createRouter({ logger, processor });
         httpRouter.use(router);
 
+        httpRouter.addAuthPolicy({
+          path: '/migration-event',
+          allow: 'unauthenticated',
+        });
         httpRouter.addAuthPolicy({
           path: '/health',
           allow: 'unauthenticated',

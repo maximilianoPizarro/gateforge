@@ -1,6 +1,7 @@
 package io.gateforge.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -323,20 +324,42 @@ public class ThreeScaleService {
         status.put("configured", sourceRegistry.hasConfiguredClients());
 
         if (sourceRegistry.hasConfiguredClients()) {
-            try {
-                List<ThreeScaleProduct> cachedProducts = listProducts();
-                List<Map<String, Object>> cachedBackends = listBackendsCombined();
-                status.put("reachable", true);
-                status.put("productCount", cachedProducts.size());
-                status.put("backendApiCount", cachedBackends.size());
-                status.put("activeDocsCount", 0);
-            } catch (Exception e) {
-                status.put("reachable", false);
-                status.put("error", e.getMessage());
+            boolean anyReachable = sourceStatuses.stream()
+                    .anyMatch(s -> Boolean.TRUE.equals(s.get("reachable")));
+            status.put("reachable", anyReachable);
+            Integer productCount = countCachedJsonArray(PRODUCTS_CACHE);
+            Integer backendCount = countCachedJsonArray(BACKENDS_CACHE);
+            if (productCount != null) {
+                status.put("productCount", productCount);
             }
+            if (backendCount != null) {
+                status.put("backendApiCount", backendCount);
+            }
+            status.put("activeDocsCount", 0);
         }
 
         return status;
+    }
+
+    /** Count elements in a cached JSON array without deserializing full product/backend graphs. */
+    private Integer countCachedJsonArray(String cacheName) {
+        try {
+            RemoteCache<String, String> cache = getOrCreateCache(cacheName);
+            if (cache == null) {
+                return null;
+            }
+            String json = cache.get(CACHE_KEY);
+            if (json == null || json.isBlank()) {
+                return null;
+            }
+            JsonNode root = objectMapper.readTree(json);
+            if (root.isArray()) {
+                return root.size();
+            }
+        } catch (Exception ignored) {
+            // omit counts on parse/cache errors
+        }
+        return null;
     }
 
     public ThreeScaleProduct getProduct(String name, String namespace) {

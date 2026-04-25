@@ -36,6 +36,6 @@ public class MigrationPlanEntity extends PanacheEntityBase {
     @Column(name = "target_cluster_label")
     public String targetClusterLabel;
 
-    @OneToMany(mappedBy = "plan", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @OneToMany(mappedBy = "plan", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     public List<GeneratedResourceEntity> resources;
 }

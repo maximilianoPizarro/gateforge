@@ -13,13 +13,14 @@ public record MigrationPlan(
     String catalogInfoYaml,
     String status,
     String targetClusterId,
-    String targetClusterLabel
+    String targetClusterLabel,
+    List<String> consolidationWarnings
 ) {
     public MigrationPlan(String id, String gatewayStrategy, List<String> sourceProducts,
                          List<GeneratedResource> resources, String aiAnalysis, Instant createdAt,
                          String catalogInfoYaml, String status) {
         this(id, gatewayStrategy, sourceProducts, resources, aiAnalysis, createdAt,
-             catalogInfoYaml, status, "local", "Local (in-cluster)");
+             catalogInfoYaml, status, "local", "Local (in-cluster)", List.of());
     }
 
     public record GeneratedResource(String kind, String name, String namespace, String yaml) {}

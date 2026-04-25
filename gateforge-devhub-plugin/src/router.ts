@@ -1,14 +1,62 @@
 import express, { Router, Request, Response } from 'express';
 import { LoggerService } from '@backstage/backend-plugin-api';
+import { GateForgeKuadrantProcessor, MigrationEvent } from './processor';
 
 export interface RouterOptions {
   logger: LoggerService;
+  processor: GateForgeKuadrantProcessor;
 }
 
 export function createRouter(options: RouterOptions): Router {
-  const { logger } = options;
+  const { logger, processor } = options;
   const router = Router();
   router.use(express.json());
+
+  router.post('/migration-event', (req: Request, res: Response) => {
+    const body = req.body as {
+      products?: string[];
+      namespace?: string;
+      planId?: string;
+      resources?: { kind: string; name: string; namespace: string }[];
+    };
+    if (
+      !body?.products ||
+      !Array.isArray(body.products) ||
+      body.products.length === 0 ||
+      typeof body.namespace !== 'string' ||
+      !body.namespace ||
+      typeof body.planId !== 'string' ||
+      !body.planId ||
+      !body?.resources ||
+      !Array.isArray(body.resources)
+    ) {
+      res.status(400).json({
+        error:
+          'Expected JSON body: { products: string[], namespace: string, planId: string, resources: { kind, name, namespace }[] }',
+      });
+      return;
+    }
+
+    const clusterDomain =
+      process.env.GATEFORGE_CLUSTER_DOMAIN || process.env.CLUSTER_DOMAIN || '';
+
+    const event: MigrationEvent = {
+      event: 'migration-applied',
+      planId: body.planId,
+      products: body.products.map(systemName => ({
+        systemName,
+        name: systemName,
+        namespace: body.namespace!,
+        authType: 'api-key',
+      })),
+      resources: body.resources,
+      clusterDomain,
+      timestamp: new Date().toISOString(),
+    };
+
+    processor.registerMigration(event);
+    res.status(204).send();
+  });
 
   router.get('/health', (_req: Request, res: Response) => {
     res.json({

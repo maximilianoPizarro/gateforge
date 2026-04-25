@@ -54,6 +54,12 @@ public class MigrationResource {
     @ConfigProperty(name = "gateforge.developer-hub.component-suffix", defaultValue = "-product")
     String componentSuffix;
 
+    @ConfigProperty(name = "gateforge.developer-hub.enabled", defaultValue = "false")
+    boolean developerHubEnabled;
+
+    @ConfigProperty(name = "gateforge.developer-hub.url", defaultValue = "none")
+    String developerHubUrl;
+
     private final HttpClient scaffolderClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10)).build();
 
@@ -132,7 +138,65 @@ public class MigrationResource {
             }
         }
 
+        if (developerHubEnabled && developerHubUrl != null && !developerHubUrl.isBlank()
+                && !"none".equalsIgnoreCase(developerHubUrl.trim())) {
+            postMigrationEventToDeveloperHub(plan, id);
+        }
+
         return result;
+    }
+
+    private void postMigrationEventToDeveloperHub(MigrationPlan plan, String planId) {
+        try {
+            String baseUrl = developerHubUrl.trim();
+            if (baseUrl.endsWith("/")) {
+                baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+            }
+            String url = baseUrl + "/api/catalog/gateforge-entity-provider/migration-event";
+
+            String primaryNs = plan.resources().stream()
+                    .filter(r -> "HTTPRoute".equals(r.kind()))
+                    .findFirst()
+                    .map(MigrationPlan.GeneratedResource::namespace)
+                    .orElseGet(() -> plan.resources().isEmpty() ? "default"
+                            : Optional.ofNullable(plan.resources().get(0).namespace()).orElse("default"));
+
+            List<String> productIds = new ArrayList<>();
+            for (String productName : plan.sourceProducts()) {
+                productIds.add(productName.toLowerCase().replaceAll("[^a-z0-9-]", "-"));
+            }
+
+            List<Map<String, String>> resourcesPayload = new ArrayList<>();
+            for (MigrationPlan.GeneratedResource r : plan.resources()) {
+                Map<String, String> entry = new LinkedHashMap<>();
+                entry.put("kind", r.kind());
+                entry.put("name", r.name());
+                entry.put("namespace", r.namespace() != null ? r.namespace() : "");
+                resourcesPayload.add(entry);
+            }
+
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("products", productIds);
+            payload.put("namespace", primaryNs);
+            payload.put("planId", planId);
+            payload.put("resources", resourcesPayload);
+
+            String json = objectMapper.writeValueAsString(payload);
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .timeout(Duration.ofSeconds(30))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(json))
+                    .build();
+
+            HttpResponse<String> resp = scaffolderClient.send(req, HttpResponse.BodyHandlers.ofString());
+            LOG.infof("Developer Hub migration-event POST %s → HTTP %d", url, resp.statusCode());
+            if (resp.statusCode() >= 400) {
+                LOG.warnf("Developer Hub migration-event error body: %s", resp.body());
+            }
+        } catch (Exception e) {
+            LOG.warnf("Failed to POST migration-event to Developer Hub: %s", e.getMessage());
+        }
     }
 
     private void triggerScaffolderTemplate(String templateName, Map<String, Object> values) {
@@ -278,7 +342,11 @@ public class MigrationResource {
         }
 
         if (request.deleteGateway()) {
-            for (MigrationPlan plan : migrationService.listPlans()) {
+            for (MigrationPlan summary : migrationService.listPlans()) {
+                MigrationPlan plan = migrationService.getPlan(summary.id());
+                if (plan == null) {
+                    continue;
+                }
                 String clusterId = plan.targetClusterId() != null ? plan.targetClusterId() : "local";
                 KubernetesClient client = clusterRegistry.getClient(clusterId);
                 for (MigrationPlan.GeneratedResource res : plan.resources()) {
@@ -321,11 +389,12 @@ public class MigrationResource {
         for (String productName : plan.sourceProducts()) {
             String sysName = productName.toLowerCase().replaceAll("[^a-z0-9-]", "-");
             String compName = sysName.endsWith(componentSuffix) ? sysName : sysName + componentSuffix;
+            String routeName = sysName + "-route";
             String namespace = plan.resources().stream()
-                    .filter(r -> "HTTPRoute".equals(r.kind()))
+                    .filter(r -> "HTTPRoute".equals(r.kind()) && r.name().equals(routeName))
                     .findFirst().map(MigrationPlan.GeneratedResource::namespace).orElse("default");
 
-            triggerScaffolderTemplate("gateforge-register-component", Map.of(
+            Map<String, Object> templateValues = new LinkedHashMap<>(Map.of(
                     "planId", id,
                     "productName", sysName,
                     "componentName", compName,
@@ -333,9 +402,55 @@ public class MigrationResource {
                     "owner", "group:default/3scale",
                     "clusterDomain", clusterDomain
             ));
+            if (request != null && request.componentYaml() != null && !request.componentYaml().isBlank()) {
+                templateValues.put("componentYaml", request.componentYaml());
+            }
+            triggerScaffolderTemplate("gateforge-register-component", templateValues);
         }
 
         return Map.of("status", "registered", "planId", id);
+    }
+
+    @GET
+    @Path("/plans/{id}/drift")
+    public List<Map<String, Object>> checkDrift(@PathParam("id") String id) {
+        MigrationPlan plan = migrationService.getPlan(id);
+        if (plan == null) {
+            throw new NotFoundException("Plan not found: " + id);
+        }
+
+        String clusterId = plan.targetClusterId() != null ? plan.targetClusterId() : "local";
+        KubernetesClient client = clusterRegistry.getClient(clusterId);
+
+        List<Map<String, Object>> driftReport = new ArrayList<>();
+        for (MigrationPlan.GeneratedResource res : plan.resources()) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("kind", res.kind());
+            entry.put("name", res.name());
+            entry.put("namespace", res.namespace());
+            try {
+                GenericKubernetesResource generic = Serialization.unmarshal(res.yaml(), GenericKubernetesResource.class);
+                if (res.namespace() != null && !res.namespace().isBlank()) {
+                    generic.getMetadata().setNamespace(res.namespace());
+                }
+                var existing = client.resource(generic).get();
+                if (existing != null) {
+                    entry.put("status", "in-sync");
+                } else {
+                    entry.put("status", "missing");
+                }
+            } catch (Exception e) {
+                String msg = e.getMessage();
+                if (msg != null && msg.contains("NotFound")) {
+                    entry.put("status", "missing");
+                } else {
+                    entry.put("status", "error");
+                    entry.put("message", msg);
+                }
+            }
+            driftReport.add(entry);
+        }
+        return driftReport;
     }
 
     @GET

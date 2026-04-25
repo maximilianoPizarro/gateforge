@@ -16,6 +16,10 @@ AI-powered migration platform for transitioning from **Red Hat 3scale API Manage
 
 > **v0.1.7** -- Multi-source 3scale, multi-cluster deployment, hub-spoke architecture with PostgreSQL persistence.
 
+### About this project
+
+> **GateForge** is an independent open-source project licensed under Apache 2.0. It is **not** an official Red Hat product. It integrates with Red Hat 3scale, Red Hat Connectivity Link, and Red Hat Developer Hub but is maintained independently. No commercial support or SLAs are offered at this time.
+
 ---
 
 ## Architecture Overview
@@ -246,4 +250,6 @@ helm install gateforge gateforge/gateforge \
 
 ## License
 
-This software is licensed under the [Apache 2.0 license](LICENSE).
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
+This software is licensed under the [Apache License 2.0](LICENSE).
