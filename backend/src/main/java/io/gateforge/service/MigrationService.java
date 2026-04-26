@@ -708,9 +708,8 @@ public class MigrationService {
         if (yaml.contains("kuadrant.io/namespace:")
                 && yaml.contains("kuadrant.io/httproute:")
                 && yaml.contains("kuadrant.io/apiproduct:")) {
-            LOG.infof(
-                    "Catalog-info for plan %s / product %s includes required Kuadrant annotations "
-                            + "(kuadrant.io/namespace, kuadrant.io/httproute, kuadrant.io/apiproduct)",
+            LOG.debugf(
+                    "Catalog-info for plan %s / product %s includes required Kuadrant annotations",
                     planId, productName);
         }
         return yaml;
