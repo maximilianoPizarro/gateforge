@@ -117,6 +117,7 @@ export function createRouter(options: RouterOptions): Router {
 
   router.get('/metrics/:namespace/:httproute', async (req: Request, res: Response) => {
     const { namespace, httproute } = req.params;
+    const serviceName = httproute.replace(/-route$/, '');
     const end = Math.floor(Date.now() / 1000);
     const start = end - 3600;
     const step = 60;
@@ -124,27 +125,27 @@ export function createRouter(options: RouterOptions): Router {
     const queries = [
       {
         name: 'request_rate',
-        query: `sum(rate(istio_requests_total{destination_service_namespace="${namespace}",destination_service_name=~".*${httproute}.*"}[5m]))`,
+        query: `sum(rate(istio_requests_total{destination_service_namespace="${namespace}",destination_service_name=~"${serviceName}.*"}[5m]))`,
       },
       {
         name: 'error_rate',
-        query: `sum(rate(istio_requests_total{destination_service_namespace="${namespace}",destination_service_name=~".*${httproute}.*",response_code=~"5.."}[5m]))`,
+        query: `sum(rate(istio_requests_total{destination_service_namespace="${namespace}",destination_service_name=~"${serviceName}.*",response_code=~"5.."}[5m]))`,
       },
       {
         name: 'p50_latency',
-        query: `histogram_quantile(0.50, sum(rate(istio_request_duration_milliseconds_bucket{destination_service_namespace="${namespace}",destination_service_name=~".*${httproute}.*"}[5m])) by (le))`,
+        query: `histogram_quantile(0.50, sum(rate(istio_request_duration_milliseconds_bucket{destination_service_namespace="${namespace}",destination_service_name=~"${serviceName}.*"}[5m])) by (le))`,
       },
       {
         name: 'p95_latency',
-        query: `histogram_quantile(0.95, sum(rate(istio_request_duration_milliseconds_bucket{destination_service_namespace="${namespace}",destination_service_name=~".*${httproute}.*"}[5m])) by (le))`,
+        query: `histogram_quantile(0.95, sum(rate(istio_request_duration_milliseconds_bucket{destination_service_namespace="${namespace}",destination_service_name=~"${serviceName}.*"}[5m])) by (le))`,
       },
       {
         name: 'p99_latency',
-        query: `histogram_quantile(0.99, sum(rate(istio_request_duration_milliseconds_bucket{destination_service_namespace="${namespace}",destination_service_name=~".*${httproute}.*"}[5m])) by (le))`,
+        query: `histogram_quantile(0.99, sum(rate(istio_request_duration_milliseconds_bucket{destination_service_namespace="${namespace}",destination_service_name=~"${serviceName}.*"}[5m])) by (le))`,
       },
       {
         name: 'traffic_by_status',
-        query: `sum by (response_code) (rate(istio_requests_total{destination_service_namespace="${namespace}",destination_service_name=~".*${httproute}.*"}[5m]))`,
+        query: `sum by (response_code) (rate(istio_requests_total{destination_service_namespace="${namespace}",destination_service_name=~"${serviceName}.*"}[5m]))`,
       },
     ];
 
