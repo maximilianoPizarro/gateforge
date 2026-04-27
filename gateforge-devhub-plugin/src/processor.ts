@@ -88,8 +88,12 @@ export class GateForgeKuadrantProcessor implements CatalogProcessor {
     const product = migrationEvent.products.find(p => p.systemName === entityName);
     if (!product) return entity;
 
-    const httpRoute = migrationEvent.resources.find(r => r.kind === 'HTTPRoute');
-    const apiProduct = migrationEvent.resources.find(r => r.kind === 'APIProduct');
+    const httpRoute =
+      migrationEvent.resources.find(r => r.kind === 'HTTPRoute' && r.name === `${entityName}-route`) ??
+      migrationEvent.resources.find(r => r.kind === 'HTTPRoute');
+    const apiProduct =
+      migrationEvent.resources.find(r => r.kind === 'APIProduct' && r.name === entityName) ??
+      migrationEvent.resources.find(r => r.kind === 'APIProduct');
 
     const enriched: Entity = {
       ...entity,

@@ -74,9 +74,18 @@ public class MigrationService {
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5)).build();
 
+    private record ResolvedBackend(String svcName, String svcNamespace, String path) {}
+
     private record ProductContext(
             String oasContent, String backendSvcName, String namespace,
-            List<ThreeScaleProduct.MappingRule> effectiveRules, boolean hasRealOas) {}
+            List<ThreeScaleProduct.MappingRule> effectiveRules, boolean hasRealOas,
+            List<ResolvedBackend> resolvedBackends) {
+
+        ProductContext(String oasContent, String backendSvcName, String namespace,
+                       List<ThreeScaleProduct.MappingRule> effectiveRules, boolean hasRealOas) {
+            this(oasContent, backendSvcName, namespace, effectiveRules, hasRealOas, List.of());
+        }
+    }
 
     public MigrationPlan analyze(String gatewayStrategy, List<String> productNames, String targetClusterId) {
         io.micrometer.core.instrument.Timer.Sample timerSample = metrics.startMigrationTimer();
@@ -148,7 +157,8 @@ public class MigrationService {
             }
 
             if (!usedKuadrantctl) {
-                resources.add(buildHttpRoute(routeName, ns, gatewayName, product, ctx.effectiveRules, ctx.backendSvcName));
+                resources.add(buildHttpRoute(routeName, ns, gatewayName, product, ctx.effectiveRules,
+                        ctx.backendSvcName, ctx.resolvedBackends));
             }
 
             resources.add(buildAuthPolicy(sysName + "-auth", ns, routeName, product));
@@ -197,6 +207,13 @@ public class MigrationService {
     }
 
     private ProductContext resolveProductContext(ThreeScaleProduct product, BackendIndex backends) {
+        List<ResolvedBackend> resolvedBackends = new ArrayList<>();
+        String primarySvcName = null;
+        String primarySvcNs = null;
+        String primaryOas = null;
+        List<ThreeScaleProduct.MappingRule> primaryRules = null;
+        boolean hasRealOas = false;
+
         for (ThreeScaleProduct.BackendUsage usage : product.backendUsages()) {
             String endpoint = null;
             long backendId = extractBackendId(usage.backendName());
@@ -206,22 +223,33 @@ public class MigrationService {
 
             String svcName = extractServiceName(endpoint);
             String svcNs = extractServiceNamespace(endpoint);
+            String path = usage.path() != null && !usage.path().isBlank() ? usage.path() : "/";
+            resolvedBackends.add(new ResolvedBackend(svcName, svcNs, path));
 
-            String fullOas = fetchFullOpenApiSpec(endpoint);
-            if (fullOas != null) {
-                LOG.infof("Fetched real OpenAPI spec from %s for product %s", endpoint, product.systemName());
-                return new ProductContext(fullOas, svcName, svcNs, product.mappingRules(), true);
+            if (primarySvcName == null) {
+                primarySvcName = svcName;
+                primarySvcNs = svcNs;
+
+                String fullOas = fetchFullOpenApiSpec(endpoint);
+                if (fullOas != null) {
+                    LOG.infof("Fetched real OpenAPI spec from %s for product %s", endpoint, product.systemName());
+                    primaryOas = fullOas;
+                    hasRealOas = true;
+                } else {
+                    List<ThreeScaleProduct.MappingRule> rules = fetchOpenApiPaths(endpoint);
+                    if (!rules.isEmpty()) {
+                        primaryRules = rules;
+                    }
+                }
             }
-
-            List<ThreeScaleProduct.MappingRule> rules = fetchOpenApiPaths(endpoint);
-            if (!rules.isEmpty()) {
-                return new ProductContext(null, svcName, svcNs, rules, false);
-            }
-
-            return new ProductContext(null, svcName, svcNs, product.mappingRules(), false);
         }
 
-        return new ProductContext(null, product.systemName(), null, product.mappingRules(), false);
+        if (primarySvcName == null) {
+            return new ProductContext(null, product.systemName(), null, product.mappingRules(), false, List.of());
+        }
+
+        List<ThreeScaleProduct.MappingRule> effectiveRules = primaryRules != null ? primaryRules : product.mappingRules();
+        return new ProductContext(primaryOas, primarySvcName, primarySvcNs, effectiveRules, hasRealOas, resolvedBackends);
     }
 
     private String fetchFullOpenApiSpec(String baseUrl) {
@@ -662,7 +690,7 @@ public class MigrationService {
 
         StringBuilder providesApis = new StringBuilder();
         plan.resources().stream()
-                .filter(r -> "APIProduct".equals(r.kind()))
+                .filter(r -> "APIProduct".equals(r.kind()) && r.name().equals(baseName))
                 .forEach(r -> providesApis.append("                    - ").append(r.name()).append("\n"));
         if (providesApis.length() == 0) {
             providesApis.append("                    - ").append(baseName).append("\n");
@@ -701,9 +729,52 @@ public class MigrationService {
                   owner: group:default/3scale
                   system: gateforge-migrated-apis
                   providesApis:
-%s
+                    - %s
+                ---
+                apiVersion: backstage.io/v1alpha1
+                kind: API
+                metadata:
+                  name: %s
+                  namespace: default
+                  description: "%s — migrated from 3scale to Connectivity Link by GateForge"
+                  annotations:
+                    kuadrant.io/namespace: %s
+                    kuadrant.io/apiproduct: %s
+                    kuadrant.io/httproute: %s
+                    backstage.io/kubernetes-namespace: %s
+                    backstage.io/kubernetes-id: %s
+                  tags:
+                    - connectivity-link
+                    - kuadrant
+                    - gateforge-migrated
+                    - gateway-api
+                  links:
+                    - title: API Gateway Endpoint
+                      url: https://%s
+                    - title: GateForge Dashboard
+                      url: %s
+                spec:
+                  type: openapi
+                  lifecycle: production
+                  owner: platform-engineering
+                  system: gateforge-migrated-apis
+                  definition: |
+                    openapi: "3.0.3"
+                    info:
+                      title: "%s"
+                      version: "1.0.0"
+                      description: "Migrated from 3scale to Connectivity Link by GateForge"
+                    paths:
+                      /:
+                        get:
+                          summary: Service info
+                          responses:
+                            '200':
+                              description: OK
                 """.formatted(componentName, desc, apiProductNamespace, routeName, apiProductName, planId,
-                apiProductNamespace, baseName, baseName, hostname, gfUrl, providesApis.toString());
+                apiProductNamespace, baseName, baseName, hostname, gfUrl, baseName,
+                baseName, desc, apiProductNamespace, apiProductName, routeName, apiProductNamespace, baseName,
+                hostname, gfUrl, desc);
 
         if (yaml.contains("kuadrant.io/namespace:")
                 && yaml.contains("kuadrant.io/httproute:")
@@ -793,6 +864,7 @@ public class MigrationService {
         StringBuilder sb = new StringBuilder();
         String gatewayName = "dedicated".equals(strategy) ? null :
                 "dual".equals(strategy) ? "gateforge-external" : "gateforge-shared";
+        String gfUrl = developerHubUrl.equals("none") ? "https://gateforge." + clusterDomain : developerHubUrl;
 
         for (int i = 0; i < products.size(); i++) {
             ThreeScaleProduct p = products.get(i);
@@ -805,13 +877,6 @@ public class MigrationService {
 
             String desc = p.description() != null ? p.description().replace("\"", "'") : sysName;
             String hostname = sysName + "." + clusterDomain;
-
-            StringBuilder apis = new StringBuilder();
-            for (ThreeScaleProduct.BackendUsage usage : p.backendUsages()) {
-                String apiName = usage.backendName().toLowerCase().replaceAll("[^a-z0-9-]", "-");
-                apis.append("                        - ").append(apiName).append("\n");
-            }
-            String providesApisBlock = apis.length() > 0 ? apis.toString() : "                        - " + sysName + "\n";
 
             sb.append("""
                     apiVersion: backstage.io/v1alpha1
@@ -843,10 +908,68 @@ public class MigrationService {
                       owner: group:default/3scale
                       system: gateforge-migrated-apis
                       providesApis:
-%s
+                        - %s
                     """.formatted(sysName, desc, ns, routeName, sysName, ns, sysName, sysName,
-                    hostname, developerHubUrl.equals("none") ? "https://gateforge." + clusterDomain : developerHubUrl,
-                    providesApisBlock));
+                    hostname, gfUrl, sysName));
+
+            String oasDefinition = oasCache.get(sysName);
+            String inlineDef;
+            if (oasDefinition != null && !oasDefinition.isBlank()) {
+                StringBuilder indented = new StringBuilder();
+                for (String line : oasDefinition.split("\n")) {
+                    indented.append("        ").append(line).append("\n");
+                }
+                inlineDef = indented.toString();
+            } else {
+                inlineDef = """
+                        openapi: "3.0.3"
+                        info:
+                          title: "%s"
+                          version: "1.0.0"
+                          description: "Migrated from 3scale to Connectivity Link by GateForge"
+                        paths:
+                          /:
+                            get:
+                              summary: Service info
+                              responses:
+                                '200':
+                                  description: OK
+                """.formatted(p.name().replace("\"", "'"));
+            }
+
+            sb.append("""
+                    ---
+                    apiVersion: backstage.io/v1alpha1
+                    kind: API
+                    metadata:
+                      name: %s
+                      namespace: default
+                      description: "%s — migrated from 3scale to Connectivity Link by GateForge"
+                      annotations:
+                        kuadrant.io/namespace: %s
+                        kuadrant.io/apiproduct: %s
+                        kuadrant.io/httproute: %s
+                        backstage.io/kubernetes-namespace: %s
+                        backstage.io/kubernetes-id: %s
+                      tags:
+                        - connectivity-link
+                        - kuadrant
+                        - gateforge-migrated
+                        - gateway-api
+                      links:
+                        - title: API Gateway Endpoint
+                          url: https://%s
+                        - title: GateForge Dashboard
+                          url: %s
+                    spec:
+                      type: openapi
+                      lifecycle: production
+                      owner: platform-engineering
+                      system: gateforge-migrated-apis
+                      definition: |
+%s
+                    """.formatted(sysName, desc, ns, sysName, routeName, ns, sysName,
+                    hostname, gfUrl, inlineDef));
         }
         return sb.toString();
     }
@@ -1093,11 +1216,24 @@ public class MigrationService {
     private MigrationPlan.GeneratedResource buildHttpRoute(
             String name, String namespace, String gatewayName,
             ThreeScaleProduct product, List<ThreeScaleProduct.MappingRule> effectiveRules,
-            String backendSvcName) {
+            String backendSvcName, List<ResolvedBackend> resolvedBackends) {
 
         StringBuilder rules = new StringBuilder();
 
-        if (effectiveRules.isEmpty()) {
+        boolean multiBackend = resolvedBackends.size() > 1;
+
+        if (multiBackend) {
+            for (ResolvedBackend rb : resolvedBackends) {
+                String pathPrefix = rb.path().equals("/") ? "/" : rb.path();
+                rules.append("        - matches:\n");
+                rules.append("            - path:\n");
+                rules.append("                type: PathPrefix\n");
+                rules.append("                value: ").append(pathPrefix).append("\n");
+                rules.append("          backendRefs:\n");
+                rules.append("            - name: ").append(rb.svcName()).append("\n");
+                rules.append("              port: 8080\n");
+            }
+        } else if (effectiveRules.isEmpty()) {
             rules.append("""
                         - matches:
                             - path:
