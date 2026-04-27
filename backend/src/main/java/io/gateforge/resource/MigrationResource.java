@@ -153,7 +153,7 @@ public class MigrationResource {
             if (baseUrl.endsWith("/")) {
                 baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
             }
-            String url = baseUrl + "/api/catalog/gateforge-entity-provider/migration-event";
+            String url = baseUrl + "/api/catalog/migration-event";
 
             List<Map<String, String>> resourcesPayload = new ArrayList<>();
             for (MigrationPlan.GeneratedResource r : plan.resources()) {
