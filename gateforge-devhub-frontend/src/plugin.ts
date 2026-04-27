@@ -1,10 +1,20 @@
 import {
   createPlugin,
+  createRouteRef,
   createRoutableExtension,
 } from '@backstage/core-plugin-api';
 
+const observabilityRouteRef = createRouteRef({ id: 'gateforge-observability' });
+const topologyRouteRef = createRouteRef({ id: 'gateforge-topology' });
+const componentEditorRouteRef = createRouteRef({ id: 'gateforge-component-editor' });
+
 export const gateforgePlugin = createPlugin({
   id: 'gateforge',
+  routes: {
+    observability: observabilityRouteRef,
+    topology: topologyRouteRef,
+    componentEditor: componentEditorRouteRef,
+  },
 });
 
 export const GateForgeObservabilityTab = gateforgePlugin.provide(
@@ -14,7 +24,7 @@ export const GateForgeObservabilityTab = gateforgePlugin.provide(
       import('./components/ObservabilityTab/ObservabilityTab').then(
         m => m.ObservabilityTab,
       ),
-    mountPoint: { id: 'gateforge-observability' } as any,
+    mountPoint: observabilityRouteRef,
   }),
 );
 
@@ -25,7 +35,7 @@ export const GateForgeTopologyTab = gateforgePlugin.provide(
       import('./components/TopologyTab/TopologyTab').then(
         m => m.TopologyTab,
       ),
-    mountPoint: { id: 'gateforge-topology' } as any,
+    mountPoint: topologyRouteRef,
   }),
 );
 
@@ -36,6 +46,6 @@ export const GateForgeComponentEditorTab = gateforgePlugin.provide(
       import('./components/ComponentEditorTab/ComponentEditorTab').then(
         m => m.ComponentEditorTab,
       ),
-    mountPoint: { id: 'gateforge-component-editor' } as any,
+    mountPoint: componentEditorRouteRef,
   }),
 );
