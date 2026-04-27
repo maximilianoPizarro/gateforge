@@ -9,6 +9,7 @@ import {
   Box,
 } from '@material-ui/core';
 import { useEntity } from '@backstage/plugin-catalog-react';
+import { fetchApiRef, useApi } from '@backstage/core-plugin-api';
 import { MetricsChart } from './MetricsChart';
 
 interface MetricsData {
@@ -20,6 +21,7 @@ interface MetricsData {
 
 export const ObservabilityTab = () => {
   const { entity } = useEntity();
+  const fetchApi = useApi(fetchApiRef);
   const [data, setData] = useState<MetricsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +38,7 @@ export const ObservabilityTab = () => {
 
     const backendUrl = `/api/catalog/gateforge-entity-provider/metrics/${namespace}/${httproute}`;
 
-    fetch(backendUrl)
+    fetchApi.fetch(backendUrl)
       .then(r => r.json())
       .then(d => {
         setData(d as MetricsData);

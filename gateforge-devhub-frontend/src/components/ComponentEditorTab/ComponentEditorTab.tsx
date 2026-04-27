@@ -17,6 +17,7 @@ import AddIcon from '@material-ui/icons/Add';
 import DeleteIcon from '@material-ui/icons/Delete';
 import SaveIcon from '@material-ui/icons/Save';
 import { useEntity } from '@backstage/plugin-catalog-react';
+import { fetchApiRef, useApi } from '@backstage/core-plugin-api';
 import { EntityForm } from './EntityForm';
 
 const useStyles = makeStyles(theme => ({
@@ -41,6 +42,7 @@ const useStyles = makeStyles(theme => ({
 export const ComponentEditorTab = () => {
   const classes = useStyles();
   const { entity } = useEntity();
+  const fetchApi = useApi(fetchApiRef);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +103,7 @@ export const ComponentEditorTab = () => {
         },
       };
 
-      const resp = await fetch(`/api/catalog/entities/by-uid/${entity.metadata.uid}`, {
+      const resp = await fetchApi.fetch(`/api/catalog/entities/by-uid/${entity.metadata.uid}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updated),
