@@ -727,26 +727,7 @@ public class MigrationService {
                 .append("  owner: group:default/3scale\n")
                 .append("  system: gateforge-migrated-apis\n")
                 .append("  providesApis:\n")
-                .append("    - ").append(sysName).append("\n")
-                .append("---\n")
-                .append("apiVersion: backstage.io/v1alpha1\n")
-                .append("kind: API\n")
-                .append("metadata:\n")
-                .append("  name: ").append(sysName).append("\n")
-                .append("  namespace: default\n")
-                .append("  description: \"").append(sysName).append(" — migrated from 3scale to Connectivity Link by GateForge\"\n")
-                .append("  annotations:\n")
-                .append("    kuadrant.io/namespace: ").append(namespace).append("\n")
-                .append("    kuadrant.io/apiproduct: ").append(sysName).append("\n")
-                .append("    kuadrant.io/httproute: ").append(routeName).append("\n")
-                .append("    backstage.io/kubernetes-namespace: ").append(namespace).append("\n")
-                .append("    backstage.io/kubernetes-id: ").append(sysName).append("\n")
-                .append("spec:\n")
-                .append("  type: openapi\n")
-                .append("  lifecycle: production\n")
-                .append("  owner: platform-engineering\n")
-                .append("  system: gateforge-migrated-apis\n")
-                .append("  definition: \"placeholder\"\n");
+                .append("    - ").append(sysName).append("\n");
         return fallback.toString();
     }
 
@@ -839,11 +820,6 @@ public class MigrationService {
             String desc = p.description() != null ? p.description().replace("\"", "'") : sysName;
             String hostname = sysName + "." + clusterDomain;
 
-            List<String> backendApiNames = new ArrayList<>();
-            for (ThreeScaleProduct.BackendUsage usage : p.backendUsages()) {
-                backendApiNames.add(sanitizeName(usage.backendName()));
-            }
-
             sb.append("apiVersion: backstage.io/v1alpha1\n")
               .append("kind: Component\n")
               .append("metadata:\n")
@@ -875,76 +851,6 @@ public class MigrationService {
               .append("  system: gateforge-migrated-apis\n")
               .append("  providesApis:\n")
               .append("    - ").append(sysName).append("\n");
-            for (String backendName : backendApiNames) {
-                if (!backendName.equals(sysName)) {
-                    sb.append("    - ").append(backendName).append("\n");
-                }
-            }
-
-            for (String backendName : backendApiNames) {
-                if (backendName.equals(sysName)) continue;
-                sb.append("---\n")
-                  .append("apiVersion: backstage.io/v1alpha1\n")
-                  .append("kind: API\n")
-                  .append("metadata:\n")
-                  .append("  name: ").append(backendName).append("\n")
-                  .append("  namespace: default\n")
-                  .append("  description: \"Backend ").append(backendName).append(" — dependency of ").append(sysName).append("\"\n")
-                  .append("  annotations:\n")
-                  .append("    kuadrant.io/namespace: ").append(ns).append("\n")
-                  .append("    kuadrant.io/apiproduct: ").append(sysName).append("\n")
-                  .append("    kuadrant.io/httproute: ").append(routeName).append("\n")
-                  .append("    backstage.io/kubernetes-namespace: ").append(ns).append("\n")
-                  .append("    backstage.io/kubernetes-id: ").append(backendName).append("\n")
-                  .append("  tags:\n")
-                  .append("    - connectivity-link\n")
-                  .append("    - kuadrant\n")
-                  .append("    - gateforge-migrated\n")
-                  .append("    - backend-api\n")
-                  .append("  links:\n")
-                  .append("    - title: API Gateway Endpoint\n")
-                  .append("      url: https://").append(hostname).append("\n")
-                  .append("    - title: GateForge Dashboard\n")
-                  .append("      url: ").append(gfUrl).append("\n")
-                  .append("spec:\n")
-                  .append("  type: openapi\n")
-                  .append("  lifecycle: production\n")
-                  .append("  owner: platform-engineering\n")
-                  .append("  system: gateforge-migrated-apis\n")
-                  .append("  definition: \"placeholder\"\n");
-            }
-
-            if (backendApiNames.isEmpty()) {
-                sb.append("---\n")
-                  .append("apiVersion: backstage.io/v1alpha1\n")
-                  .append("kind: API\n")
-                  .append("metadata:\n")
-                  .append("  name: ").append(sysName).append("-api\n")
-                  .append("  namespace: default\n")
-                  .append("  description: \"").append(desc).append(" — migrated from 3scale to Connectivity Link by GateForge\"\n")
-                  .append("  annotations:\n")
-                  .append("    kuadrant.io/namespace: ").append(ns).append("\n")
-                  .append("    kuadrant.io/apiproduct: ").append(sysName).append("\n")
-                  .append("    kuadrant.io/httproute: ").append(routeName).append("\n")
-                  .append("    backstage.io/kubernetes-namespace: ").append(ns).append("\n")
-                  .append("    backstage.io/kubernetes-id: ").append(sysName).append("\n")
-                  .append("  tags:\n")
-                  .append("    - connectivity-link\n")
-                  .append("    - kuadrant\n")
-                  .append("    - gateforge-migrated\n")
-                  .append("    - gateway-api\n")
-                  .append("  links:\n")
-                  .append("    - title: API Gateway Endpoint\n")
-                  .append("      url: https://").append(hostname).append("\n")
-                  .append("    - title: GateForge Dashboard\n")
-                  .append("      url: ").append(gfUrl).append("\n")
-                  .append("spec:\n")
-                  .append("  type: openapi\n")
-                  .append("  lifecycle: production\n")
-                  .append("  owner: platform-engineering\n")
-                  .append("  system: gateforge-migrated-apis\n")
-                  .append("  definition: \"placeholder\"\n");
-            }
         }
         return sb.toString();
     }
