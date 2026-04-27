@@ -215,7 +215,7 @@ public class MigrationResource {
             }
             String locationUrl = baseUrl + "/api/catalog/locations";
 
-            String gateforgeBaseUrl = baseUrl + "/api/migration/plans/" + plan.id();
+            String gateforgeBaseUrl = "https://gateforge-gateforge." + clusterDomain + "/api/migration/plans/" + plan.id();
 
             for (String productName : plan.sourceProducts()) {
                 String sysName = productName.toLowerCase().replaceAll("[^a-z0-9-]", "-");
