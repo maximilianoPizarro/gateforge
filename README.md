@@ -14,7 +14,7 @@
 
 AI-powered migration platform for transitioning from **Red Hat 3scale API Management** to **Red Hat Connectivity Link** (Kuadrant) on OpenShift. Built with **Quarkus** (backend), **Angular** (frontend), **PostgreSQL** (persistence), and **LangChain4j** (AI).
 
-> **v0.1.8** -- Multi-source 3scale, multi-cluster deployment, hub-spoke architecture with PostgreSQL persistence.
+> **v0.1.9** -- APICast self-managed/multi-tenant discovery, 3scale entity conflict resolution, ObservabilityTab/ComponentEditor fixes.
 
 ### About this project
 
@@ -69,12 +69,67 @@ AI-powered migration platform for transitioning from **Red Hat 3scale API Manage
 - **Pre-registration Editing**: Edit Component definition before catalog registration
 - **Catalog Enrichment**: `GateForgeKuadrantProcessor` enriches 3scale API entities with `kuadrant.io/*` annotations
 
+### Phase 6: APICast Discovery and Migration (v0.1.9)
+- **APIManager CRD scanning**: Discovers `APIManager` resources cluster-wide via Fabric8 client
+- **Self-managed detection**: Filters for APIManagers with `spec.apicast` (self-managed) and `Available` condition
+- **Configuration analysis**: Extracts staging/production specs, custom policies, TLS, OpenTracing settings
+- **Istio/Connectivity Link mapping**: Maps APICast config to Gateway, EnvoyFilter, DestinationRule, TelemetryPolicy, ServiceEntry
+- **Multi-tenant support**: Detects tenant configurations within APIManager CRDs
+- **4 test scenarios** in GitOps with Microcks-backed mocks (API Key, OIDC, Multi-Tenant, Custom Policies+TLS)
+- **3scale entity deregistration**: Post-migration unregistration of 3scale-discovered entities to prevent catalog conflicts
+- **Bug fixes**: ObservabilityTab null guard for metrics, ComponentEditorTab broadened GateForge detection
+
 ### Phase 3: Hub-Spoke Architecture
 - **PostgreSQL persistence** for migration plans and audit entries (replaces in-memory storage)
 - **Flyway migrations** for versioned schema evolution (`src/main/resources/db/migration/`)
 - **Federated audit log** with cluster/action filtering (`/api/hub/audit`)
 - **Hub overview API** with aggregated stats (`/api/hub/overview`)
 - **Topology API** showing all clusters and sources (`/api/hub/topology`)
+
+---
+
+## APICast Discovery Architecture
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant API as GateForge API
+    participant Svc as APICastDiscoveryService
+    participant K8s as Kubernetes API
+
+    User->>API: GET /api/apicast/discover
+    API->>Svc: discoverAllAPIManagers
+    Svc->>K8s: List APIManagers all namespaces
+    K8s-->>Svc: N APIManagers
+    Svc->>Svc: Filter self-managed and ready
+    loop Each APIManager
+        Svc->>K8s: List Products in namespace
+        Svc->>K8s: List APIcast pods
+        Svc->>Svc: analyzeAPICast extracts config
+    end
+    Svc-->>API: List of APICastConfig
+    API-->>User: JSON with discovered APIManagers
+```
+
+```mermaid
+flowchart LR
+    subgraph apicast [3scale APICast]
+        Deploy[Deployment staging/production]
+        Policies[Custom Policies Lua]
+        TLS[TLS Config]
+        Tracing[OpenTracing]
+    end
+    subgraph cl [Connectivity Link]
+        Gateway[Istio Gateway]
+        EFilter[EnvoyFilter WASM]
+        DRule[DestinationRule TLS]
+        Telemetry[TelemetryPolicy OTel]
+    end
+    Deploy --> Gateway
+    Policies --> EFilter
+    TLS --> DRule
+    Tracing --> Telemetry
+```
 
 ---
 
@@ -197,6 +252,16 @@ helm install gateforge gateforge/gateforge \
 | /api/migration/plans/{id}/catalog-info/{product} | GET | Serve generated catalog-info.yaml for catalog:register |
 | /api/migration/plans/{id}/confirm-registration | POST | Confirm Component registration (with optional edits) |
 
+### APICast Discovery APIs (Phase 6)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| /api/apicast/discover | GET | Discover all APIManagers with self-managed APICast |
+| /api/apicast/discover/{namespace} | GET | Discover APIManagers in a specific namespace |
+| /api/apicast/analyze/{namespace}/{name} | GET | Analyze specific APIManager configuration |
+| /api/apicast/map | POST | Map APICast config to Istio/Connectivity Link resources |
+| /api/apicast/map-all | POST | Batch map all discovered APICasts |
+
 ### Hub-Spoke APIs (Phase 3)
 
 | Endpoint | Method | Description |
@@ -212,8 +277,8 @@ helm install gateforge gateforge/gateforge \
 
 | Value | Default | Description |
 |-------|---------|-------------|
-| `backend.image.tag` | v0.1.8 | Backend image tag |
-| `frontend.image.tag` | v0.1.8 | Frontend image tag |
+| `backend.image.tag` | v0.1.9 | Backend image tag |
+| `frontend.image.tag` | v0.1.9 | Frontend image tag |
 | `ai.enabled` | true | Enable AI features |
 | `ai.endpoint` | litellm-prod... | LLM endpoint URL |
 | `ai.model` | deepseek-r1-distill-qwen-14b | AI model name |

@@ -1,6 +1,6 @@
 {
   "name": "@gateforge/backstage-plugin-gateforge-frontend",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "GateForge frontend plugin for Red Hat Developer Hub — Observability, Policy Topology, and Component Editor tabs",
   "main": "dist/index.esm.js",
   "types": "dist/index.d.ts",

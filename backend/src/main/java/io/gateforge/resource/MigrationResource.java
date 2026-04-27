@@ -142,6 +142,7 @@ public class MigrationResource {
                 && !"none".equalsIgnoreCase(developerHubUrl.trim())) {
             postMigrationEventToDeveloperHub(plan, id);
             registerCatalogEntities(plan);
+            unregister3ScaleEntities(plan);
         }
 
         return result;
@@ -245,6 +246,116 @@ public class MigrationResource {
             }
         } catch (Exception e) {
             LOG.warnf("Failed to register catalog entities: %s", e.getMessage());
+        }
+    }
+
+    private void unregister3ScaleEntities(MigrationPlan plan) {
+        try {
+            String baseUrl = developerHubUrl.trim();
+            if (baseUrl.endsWith("/")) {
+                baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+            }
+            for (String productName : plan.sourceProducts()) {
+                String sysName = productName.toLowerCase().replaceAll("[^a-z0-9-]", "-");
+                unregister3ScaleEntity(sysName, baseUrl);
+            }
+        } catch (Exception e) {
+            LOG.warnf("Failed to unregister 3scale entities: %s", e.getMessage());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void unregister3ScaleEntity(String sysName, String baseUrl) {
+        try {
+            String entitiesUrl = baseUrl + "/api/catalog/entities/by-query?"
+                    + "filter=kind=API,metadata.name=" + sysName;
+
+            HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
+                    .uri(URI.create(entitiesUrl))
+                    .timeout(Duration.ofSeconds(15))
+                    .GET();
+            if (scaffolderToken.isPresent() && !scaffolderToken.get().isBlank()) {
+                reqBuilder.header("Authorization", "Bearer " + scaffolderToken.get());
+            }
+            HttpResponse<String> resp = scaffolderClient.send(reqBuilder.build(), HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() != 200) {
+                LOG.warnf("Could not query 3scale entity '%s': HTTP %d", sysName, resp.statusCode());
+                return;
+            }
+
+            List<?> entities = objectMapper.readValue(resp.body(), List.class);
+            for (Object entity : entities) {
+                Map<String, Object> e = (Map<String, Object>) entity;
+                Map<String, Object> metadata = (Map<String, Object>) e.get("metadata");
+                Map<String, Object> annotations = metadata != null
+                        ? (Map<String, Object>) metadata.get("annotations")
+                        : null;
+                if (annotations == null) continue;
+
+                String originLocation = String.valueOf(
+                        annotations.getOrDefault("backstage.io/managed-by-origin-location", ""));
+                if (!originLocation.contains("3scale")) continue;
+
+                String uid = String.valueOf(metadata.get("uid"));
+                String locationRef = String.valueOf(
+                        annotations.getOrDefault("backstage.io/origin-location-ref", ""));
+
+                LOG.infof("Unregistering 3scale entity '%s' (uid=%s, origin=%s)", sysName, uid, originLocation);
+                if (locationRef != null && !locationRef.isBlank()) {
+                    deleteLocationByRef(baseUrl, locationRef);
+                } else {
+                    deleteEntityByUid(baseUrl, uid);
+                }
+            }
+        } catch (Exception e) {
+            LOG.warnf("Error unregistering 3scale entity '%s': %s", sysName, e.getMessage());
+        }
+    }
+
+    private void deleteLocationByRef(String baseUrl, String locationRef) {
+        try {
+            String url = baseUrl + "/api/catalog/locations/by-query?filter=target=" + locationRef;
+            HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .timeout(Duration.ofSeconds(15))
+                    .GET();
+            if (scaffolderToken.isPresent() && !scaffolderToken.get().isBlank()) {
+                reqBuilder.header("Authorization", "Bearer " + scaffolderToken.get());
+            }
+            HttpResponse<String> resp = scaffolderClient.send(reqBuilder.build(), HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() == 200) {
+                List<?> locations = objectMapper.readValue(resp.body(), List.class);
+                for (Object loc : locations) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> l = (Map<String, Object>) loc;
+                    String locId = String.valueOf(l.get("id"));
+                    HttpRequest delReq = HttpRequest.newBuilder()
+                            .uri(URI.create(baseUrl + "/api/catalog/locations/" + locId))
+                            .timeout(Duration.ofSeconds(15))
+                            .DELETE()
+                            .build();
+                    scaffolderClient.send(delReq, HttpResponse.BodyHandlers.ofString());
+                    LOG.infof("Deleted 3scale location %s", locId);
+                }
+            }
+        } catch (Exception e) {
+            LOG.warnf("Error deleting location ref '%s': %s", locationRef, e.getMessage());
+        }
+    }
+
+    private void deleteEntityByUid(String baseUrl, String uid) {
+        try {
+            HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
+                    .uri(URI.create(baseUrl + "/api/catalog/entities/by-uid/" + uid))
+                    .timeout(Duration.ofSeconds(15));
+            if (scaffolderToken.isPresent() && !scaffolderToken.get().isBlank()) {
+                reqBuilder.header("Authorization", "Bearer " + scaffolderToken.get());
+            }
+            HttpRequest delReq = reqBuilder.DELETE().build();
+            HttpResponse<String> resp = scaffolderClient.send(delReq, HttpResponse.BodyHandlers.ofString());
+            LOG.infof("Deleted 3scale entity uid=%s → HTTP %d", uid, resp.statusCode());
+        } catch (Exception e) {
+            LOG.warnf("Error deleting entity uid '%s': %s", uid, e.getMessage());
         }
     }
 

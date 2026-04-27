@@ -67,7 +67,17 @@ export const ObservabilityTab = () => {
     );
   }
 
-  if (!data) return null;
+  if (!data || !data.metrics) {
+    return (
+      <Card>
+        <CardContent>
+          <Typography color="textSecondary">
+            No metrics available. The Thanos querier may not be configured or reachable for this namespace.
+          </Typography>
+        </CardContent>
+      </Card>
+    );
+  }
 
   const extractTimeSeries = (metricKey: string): Array<{ time: string; value: number }> => {
     const metric = data.metrics[metricKey];

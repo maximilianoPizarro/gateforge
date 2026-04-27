@@ -36,7 +36,7 @@ rules:
     verbs: [get, list]
   - apiGroups: [apps.3scale.net]
     resources: [apimanagers]
-    verbs: [list]
+    verbs: [get, list, watch]
   - apiGroups: [kuadrant.io]
     resources: [authpolicies, ratelimitpolicies, kuadrants]
     verbs: [get, list]

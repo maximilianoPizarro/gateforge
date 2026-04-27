@@ -45,8 +45,11 @@ export const ComponentEditorTab = () => {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const origin = entity.metadata.annotations?.['backstage.io/managed-by-origin-location'] || '';
-  const isGateforgeManaged = origin.startsWith('gateforge:');
+  const entityAnnotations = entity.metadata.annotations || {};
+  const origin = entityAnnotations['backstage.io/managed-by-origin-location'] || '';
+  const isGateforgeManaged =
+    origin.startsWith('gateforge:') ||
+    entityAnnotations['gateforge.io/managed-by'] === 'gateforge';
 
   const [description, setDescription] = useState(entity.metadata.description || '');
   const [tags, setTags] = useState<string[]>((entity.metadata.tags as string[]) || []);
