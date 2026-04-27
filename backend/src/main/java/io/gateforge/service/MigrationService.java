@@ -700,56 +700,54 @@ public class MigrationService {
         String hostname = sysName + "." + clusterDomain;
         String gfUrl = developerHubUrl.equals("none") ? "https://gateforge." + clusterDomain : developerHubUrl;
 
-        return """
-                apiVersion: backstage.io/v1alpha1
-                kind: Component
-                metadata:
-                  name: %s
-                  namespace: default
-                  description: "%s — migrated from 3scale to Connectivity Link by GateForge"
-                  annotations:
-                    kuadrant.io/namespace: %s
-                    kuadrant.io/httproute: %s
-                    kuadrant.io/apiproduct: %s
-                    gateforge.io/managed-by: gateforge
-                    gateforge.io/migration-plan-id: %s
-                    backstage.io/kubernetes-namespace: %s
-                    backstage.io/kubernetes-id: %s
-                    backstage.io/kubernetes-label-selector: "app.kubernetes.io/managed-by=gateforge,gateforge.io/product=%s"
-                    backstage.io/managed-by-origin-location: "gateforge:%s"
-                  tags:
-                    - connectivity-link
-                    - kuadrant
-                    - gateforge-migrated
-                spec:
-                  type: service
-                  lifecycle: production
-                  owner: group:default/3scale
-                  system: gateforge-migrated-apis
-                  providesApis:
-                    - %s
-                ---
-                apiVersion: backstage.io/v1alpha1
-                kind: API
-                metadata:
-                  name: %s
-                  namespace: default
-                  description: "%s — migrated from 3scale to Connectivity Link by GateForge"
-                  annotations:
-                    kuadrant.io/namespace: %s
-                    kuadrant.io/apiproduct: %s
-                    kuadrant.io/httproute: %s
-                    backstage.io/kubernetes-namespace: %s
-                    backstage.io/kubernetes-id: %s
-                spec:
-                  type: openapi
-                  lifecycle: production
-                  owner: platform-engineering
-                  system: gateforge-migrated-apis
-                  definition: "placeholder"
-                """.formatted(componentName, sysName, namespace, routeName, sysName, planId,
-                namespace, sysName, sysName, sysName, sysName,
-                sysName, sysName, namespace, sysName, routeName, namespace, sysName);
+        StringBuilder fallback = new StringBuilder();
+        fallback.append("apiVersion: backstage.io/v1alpha1\n")
+                .append("kind: Component\n")
+                .append("metadata:\n")
+                .append("  name: ").append(componentName).append("\n")
+                .append("  namespace: default\n")
+                .append("  description: \"").append(sysName).append(" — migrated from 3scale to Connectivity Link by GateForge\"\n")
+                .append("  annotations:\n")
+                .append("    kuadrant.io/namespace: ").append(namespace).append("\n")
+                .append("    kuadrant.io/httproute: ").append(routeName).append("\n")
+                .append("    kuadrant.io/apiproduct: ").append(sysName).append("\n")
+                .append("    gateforge.io/managed-by: gateforge\n")
+                .append("    gateforge.io/migration-plan-id: ").append(planId).append("\n")
+                .append("    backstage.io/kubernetes-namespace: ").append(namespace).append("\n")
+                .append("    backstage.io/kubernetes-id: ").append(sysName).append("\n")
+                .append("    backstage.io/kubernetes-label-selector: \"app.kubernetes.io/managed-by=gateforge,gateforge.io/product=").append(sysName).append("\"\n")
+                .append("    backstage.io/managed-by-origin-location: \"gateforge:").append(sysName).append("\"\n")
+                .append("  tags:\n")
+                .append("    - connectivity-link\n")
+                .append("    - kuadrant\n")
+                .append("    - gateforge-migrated\n")
+                .append("spec:\n")
+                .append("  type: service\n")
+                .append("  lifecycle: production\n")
+                .append("  owner: group:default/3scale\n")
+                .append("  system: gateforge-migrated-apis\n")
+                .append("  providesApis:\n")
+                .append("    - ").append(sysName).append("\n")
+                .append("---\n")
+                .append("apiVersion: backstage.io/v1alpha1\n")
+                .append("kind: API\n")
+                .append("metadata:\n")
+                .append("  name: ").append(sysName).append("\n")
+                .append("  namespace: default\n")
+                .append("  description: \"").append(sysName).append(" — migrated from 3scale to Connectivity Link by GateForge\"\n")
+                .append("  annotations:\n")
+                .append("    kuadrant.io/namespace: ").append(namespace).append("\n")
+                .append("    kuadrant.io/apiproduct: ").append(sysName).append("\n")
+                .append("    kuadrant.io/httproute: ").append(routeName).append("\n")
+                .append("    backstage.io/kubernetes-namespace: ").append(namespace).append("\n")
+                .append("    backstage.io/kubernetes-id: ").append(sysName).append("\n")
+                .append("spec:\n")
+                .append("  type: openapi\n")
+                .append("  lifecycle: production\n")
+                .append("  owner: platform-engineering\n")
+                .append("  system: gateforge-migrated-apis\n")
+                .append("  definition: \"placeholder\"\n");
+        return fallback.toString();
     }
 
     public List<Map<String, String>> generateTestCommands(String planId) {
@@ -852,77 +850,71 @@ public class MigrationService {
 
             StringBuilder providesApis = new StringBuilder();
             for (String apiName : apiNames) {
-                providesApis.append("                        - ").append(apiName).append("\n");
+                providesApis.append("    - ").append(apiName).append("\n");
             }
 
-            sb.append("""
-                    apiVersion: backstage.io/v1alpha1
-                    kind: Component
-                    metadata:
-                      name: %s-product
-                      namespace: default
-                      description: "%s — migrated from 3scale to Connectivity Link by GateForge"
-                      annotations:
-                        kuadrant.io/namespace: %s
-                        kuadrant.io/httproute: %s
-                        kuadrant.io/apiproduct: %s
-                        gateforge.io/managed-by: gateforge
-                        backstage.io/kubernetes-namespace: %s
-                        backstage.io/kubernetes-id: %s
-                        backstage.io/kubernetes-label-selector: "app.kubernetes.io/managed-by=gateforge,gateforge.io/product=%s"
-                        backstage.io/managed-by-origin-location: "gateforge:%s"
-                      tags:
-                        - connectivity-link
-                        - kuadrant
-                        - gateforge-migrated
-                      links:
-                        - title: API Gateway Endpoint
-                          url: https://%s
-                        - title: GateForge Dashboard
-                          url: %s
-                    spec:
-                      type: service
-                      lifecycle: production
-                      owner: group:default/3scale
-                      system: gateforge-migrated-apis
-                      providesApis:
-%s
-                    """.formatted(sysName, desc, ns, routeName, sysName, ns, sysName, sysName, sysName,
-                    hostname, gfUrl, providesApis.toString()));
+            sb.append("apiVersion: backstage.io/v1alpha1\n")
+              .append("kind: Component\n")
+              .append("metadata:\n")
+              .append("  name: ").append(sysName).append("-product\n")
+              .append("  namespace: default\n")
+              .append("  description: \"").append(desc).append(" — migrated from 3scale to Connectivity Link by GateForge\"\n")
+              .append("  annotations:\n")
+              .append("    kuadrant.io/namespace: ").append(ns).append("\n")
+              .append("    kuadrant.io/httproute: ").append(routeName).append("\n")
+              .append("    kuadrant.io/apiproduct: ").append(sysName).append("\n")
+              .append("    gateforge.io/managed-by: gateforge\n")
+              .append("    backstage.io/kubernetes-namespace: ").append(ns).append("\n")
+              .append("    backstage.io/kubernetes-id: ").append(sysName).append("\n")
+              .append("    backstage.io/kubernetes-label-selector: \"app.kubernetes.io/managed-by=gateforge,gateforge.io/product=").append(sysName).append("\"\n")
+              .append("    backstage.io/managed-by-origin-location: \"gateforge:").append(sysName).append("\"\n")
+              .append("  tags:\n")
+              .append("    - connectivity-link\n")
+              .append("    - kuadrant\n")
+              .append("    - gateforge-migrated\n")
+              .append("  links:\n")
+              .append("    - title: API Gateway Endpoint\n")
+              .append("      url: https://").append(hostname).append("\n")
+              .append("    - title: GateForge Dashboard\n")
+              .append("      url: ").append(gfUrl).append("\n")
+              .append("spec:\n")
+              .append("  type: service\n")
+              .append("  lifecycle: production\n")
+              .append("  owner: group:default/3scale\n")
+              .append("  system: gateforge-migrated-apis\n")
+              .append("  providesApis:\n")
+              .append(providesApis);
 
             for (String apiName : apiNames) {
-                sb.append("""
-                    ---
-                    apiVersion: backstage.io/v1alpha1
-                    kind: API
-                    metadata:
-                      name: %s
-                      namespace: default
-                      description: "%s — migrated from 3scale to Connectivity Link by GateForge"
-                      annotations:
-                        kuadrant.io/namespace: %s
-                        kuadrant.io/apiproduct: %s
-                        kuadrant.io/httproute: %s
-                        backstage.io/kubernetes-namespace: %s
-                        backstage.io/kubernetes-id: %s
-                      tags:
-                        - connectivity-link
-                        - kuadrant
-                        - gateforge-migrated
-                        - gateway-api
-                      links:
-                        - title: API Gateway Endpoint
-                          url: https://%s
-                        - title: GateForge Dashboard
-                          url: %s
-                    spec:
-                      type: openapi
-                      lifecycle: production
-                      owner: platform-engineering
-                      system: gateforge-migrated-apis
-                      definition: "placeholder"
-                    """.formatted(apiName, desc, ns, sysName, routeName, ns, apiName,
-                    hostname, gfUrl));
+                sb.append("---\n")
+                  .append("apiVersion: backstage.io/v1alpha1\n")
+                  .append("kind: API\n")
+                  .append("metadata:\n")
+                  .append("  name: ").append(apiName).append("\n")
+                  .append("  namespace: default\n")
+                  .append("  description: \"").append(desc).append(" — migrated from 3scale to Connectivity Link by GateForge\"\n")
+                  .append("  annotations:\n")
+                  .append("    kuadrant.io/namespace: ").append(ns).append("\n")
+                  .append("    kuadrant.io/apiproduct: ").append(sysName).append("\n")
+                  .append("    kuadrant.io/httproute: ").append(routeName).append("\n")
+                  .append("    backstage.io/kubernetes-namespace: ").append(ns).append("\n")
+                  .append("    backstage.io/kubernetes-id: ").append(apiName).append("\n")
+                  .append("  tags:\n")
+                  .append("    - connectivity-link\n")
+                  .append("    - kuadrant\n")
+                  .append("    - gateforge-migrated\n")
+                  .append("    - gateway-api\n")
+                  .append("  links:\n")
+                  .append("    - title: API Gateway Endpoint\n")
+                  .append("      url: https://").append(hostname).append("\n")
+                  .append("    - title: GateForge Dashboard\n")
+                  .append("      url: ").append(gfUrl).append("\n")
+                  .append("spec:\n")
+                  .append("  type: openapi\n")
+                  .append("  lifecycle: production\n")
+                  .append("  owner: platform-engineering\n")
+                  .append("  system: gateforge-migrated-apis\n")
+                  .append("  definition: \"placeholder\"\n");
             }
         }
         return sb.toString();
