@@ -9,6 +9,12 @@
     "role": "frontend-plugin",
     "pluginId": "gateforge"
   },
+  "scalprum": {
+    "name": "gateforge.backstage-plugin-gateforge-frontend",
+    "exposedModules": {
+      "PluginRoot": "./src/index.ts"
+    }
+  },
   "scripts": {
     "build": "backstage-cli package build",
     "clean": "backstage-cli package clean",
