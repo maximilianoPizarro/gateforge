@@ -839,19 +839,7 @@ public class MigrationService {
             String desc = p.description() != null ? p.description().replace("\"", "'") : sysName;
             String hostname = sysName + "." + clusterDomain;
 
-            List<String> apiNames = new ArrayList<>();
-            if (!p.backendUsages().isEmpty()) {
-                for (ThreeScaleProduct.BackendUsage usage : p.backendUsages()) {
-                    apiNames.add(sanitizeName(usage.backendName()));
-                }
-            } else {
-                apiNames.add(sysName);
-            }
-
-            StringBuilder providesApis = new StringBuilder();
-            for (String apiName : apiNames) {
-                providesApis.append("    - ").append(apiName).append("\n");
-            }
+            boolean hasThreeScaleBackends = !p.backendUsages().isEmpty();
 
             sb.append("apiVersion: backstage.io/v1alpha1\n")
               .append("kind: Component\n")
@@ -883,14 +871,14 @@ public class MigrationService {
               .append("  owner: group:default/3scale\n")
               .append("  system: gateforge-migrated-apis\n")
               .append("  providesApis:\n")
-              .append(providesApis);
+              .append("    - ").append(sysName).append("\n");
 
-            for (String apiName : apiNames) {
+            if (!hasThreeScaleBackends) {
                 sb.append("---\n")
                   .append("apiVersion: backstage.io/v1alpha1\n")
                   .append("kind: API\n")
                   .append("metadata:\n")
-                  .append("  name: ").append(apiName).append("\n")
+                  .append("  name: ").append(sysName).append("\n")
                   .append("  namespace: default\n")
                   .append("  description: \"").append(desc).append(" — migrated from 3scale to Connectivity Link by GateForge\"\n")
                   .append("  annotations:\n")
@@ -898,7 +886,7 @@ public class MigrationService {
                   .append("    kuadrant.io/apiproduct: ").append(sysName).append("\n")
                   .append("    kuadrant.io/httproute: ").append(routeName).append("\n")
                   .append("    backstage.io/kubernetes-namespace: ").append(ns).append("\n")
-                  .append("    backstage.io/kubernetes-id: ").append(apiName).append("\n")
+                  .append("    backstage.io/kubernetes-id: ").append(sysName).append("\n")
                   .append("  tags:\n")
                   .append("    - connectivity-link\n")
                   .append("    - kuadrant\n")

@@ -155,21 +155,6 @@ public class MigrationResource {
             }
             String url = baseUrl + "/api/catalog/gateforge-entity-provider/migration-event";
 
-            List<Map<String, String>> productEntries = new ArrayList<>();
-            for (String productName : plan.sourceProducts()) {
-                String sysName = productName.toLowerCase().replaceAll("[^a-z0-9-]", "-");
-                String routeName = sysName + "-route";
-                String ns = plan.resources().stream()
-                        .filter(r -> "HTTPRoute".equals(r.kind()) && routeName.equals(r.name()))
-                        .findFirst()
-                        .map(MigrationPlan.GeneratedResource::namespace)
-                        .orElse("default");
-                Map<String, String> entry = new LinkedHashMap<>();
-                entry.put("id", sysName);
-                entry.put("namespace", ns);
-                productEntries.add(entry);
-            }
-
             List<Map<String, String>> resourcesPayload = new ArrayList<>();
             for (MigrationPlan.GeneratedResource r : plan.resources()) {
                 Map<String, String> entry = new LinkedHashMap<>();
@@ -179,23 +164,38 @@ public class MigrationResource {
                 resourcesPayload.add(entry);
             }
 
-            Map<String, Object> payload = new LinkedHashMap<>();
-            payload.put("products", productEntries);
-            payload.put("planId", planId);
-            payload.put("resources", resourcesPayload);
+            for (String productName : plan.sourceProducts()) {
+                String sysName = productName.toLowerCase().replaceAll("[^a-z0-9-]", "-");
+                String routeName = sysName + "-route";
+                String ns = plan.resources().stream()
+                        .filter(r -> "HTTPRoute".equals(r.kind()) && routeName.equals(r.name()))
+                        .findFirst()
+                        .map(MigrationPlan.GeneratedResource::namespace)
+                        .orElse("default");
 
-            String json = objectMapper.writeValueAsString(payload);
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .timeout(Duration.ofSeconds(30))
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(json))
-                    .build();
+                Map<String, Object> payload = new LinkedHashMap<>();
+                payload.put("products", List.of(sysName));
+                payload.put("namespace", ns);
+                payload.put("planId", planId);
+                payload.put("resources", resourcesPayload);
 
-            HttpResponse<String> resp = scaffolderClient.send(req, HttpResponse.BodyHandlers.ofString());
-            LOG.infof("Developer Hub migration-event POST %s → HTTP %d", url, resp.statusCode());
-            if (resp.statusCode() >= 400) {
-                LOG.warnf("Developer Hub migration-event error body: %s", resp.body());
+                String json = objectMapper.writeValueAsString(payload);
+                HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
+                        .uri(URI.create(url))
+                        .timeout(Duration.ofSeconds(30))
+                        .header("Content-Type", "application/json");
+                if (scaffolderToken.isPresent() && !scaffolderToken.get().isBlank()) {
+                    reqBuilder.header("Authorization", "Bearer " + scaffolderToken.get());
+                }
+                HttpRequest req = reqBuilder
+                        .POST(HttpRequest.BodyPublishers.ofString(json))
+                        .build();
+
+                HttpResponse<String> resp = scaffolderClient.send(req, HttpResponse.BodyHandlers.ofString());
+                LOG.infof("Developer Hub migration-event POST for %s → HTTP %d", sysName, resp.statusCode());
+                if (resp.statusCode() >= 400) {
+                    LOG.warnf("Developer Hub migration-event error for %s: %s", sysName, resp.body());
+                }
             }
         } catch (Exception e) {
             LOG.warnf("Failed to POST migration-event to Developer Hub: %s", e.getMessage());
@@ -226,10 +226,14 @@ public class MigrationResource {
                 locationPayload.put("target", catalogEndpoint);
 
                 String json = objectMapper.writeValueAsString(locationPayload);
-                HttpRequest req = HttpRequest.newBuilder()
+                HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
                         .uri(URI.create(locationUrl))
                         .timeout(Duration.ofSeconds(30))
-                        .header("Content-Type", "application/json")
+                        .header("Content-Type", "application/json");
+                if (scaffolderToken.isPresent() && !scaffolderToken.get().isBlank()) {
+                    reqBuilder.header("Authorization", "Bearer " + scaffolderToken.get());
+                }
+                HttpRequest req = reqBuilder
                         .POST(HttpRequest.BodyPublishers.ofString(json))
                         .build();
 

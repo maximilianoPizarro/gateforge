@@ -14,7 +14,7 @@ export function createRouter(options: RouterOptions): Router {
 
   router.post('/migration-event', (req: Request, res: Response) => {
     const body = req.body as {
-      products?: string[];
+      products?: unknown[];
       namespace?: string;
       planId?: string;
       resources?: { kind: string; name: string; namespace: string }[];
@@ -23,8 +23,6 @@ export function createRouter(options: RouterOptions): Router {
       !body?.products ||
       !Array.isArray(body.products) ||
       body.products.length === 0 ||
-      typeof body.namespace !== 'string' ||
-      !body.namespace ||
       typeof body.planId !== 'string' ||
       !body.planId ||
       !body?.resources ||
@@ -32,7 +30,26 @@ export function createRouter(options: RouterOptions): Router {
     ) {
       res.status(400).json({
         error:
-          'Expected JSON body: { products: string[], namespace: string, planId: string, resources: { kind, name, namespace }[] }',
+          'Expected JSON body: { products: string[] | {id,namespace}[], namespace?: string, planId: string, resources: [...] }',
+      });
+      return;
+    }
+
+    const isStringArray = body.products.every(p => typeof p === 'string');
+    const isObjectArray = body.products.every(
+      p => typeof p === 'object' && p !== null && 'id' in p && 'namespace' in p,
+    );
+
+    if (!isStringArray && !isObjectArray) {
+      res.status(400).json({
+        error: 'products must be string[] or {id: string, namespace: string}[]',
+      });
+      return;
+    }
+
+    if (isStringArray && (typeof body.namespace !== 'string' || !body.namespace)) {
+      res.status(400).json({
+        error: 'When products is string[], namespace (string) is required at top level',
       });
       return;
     }
@@ -40,15 +57,27 @@ export function createRouter(options: RouterOptions): Router {
     const clusterDomain =
       process.env.GATEFORGE_CLUSTER_DOMAIN || process.env.CLUSTER_DOMAIN || '';
 
-    const event: MigrationEvent = {
-      event: 'migration-applied',
-      planId: body.planId,
-      products: body.products.map(systemName => ({
+    let productEntries: { systemName: string; name: string; namespace: string; authType: string }[];
+    if (isStringArray) {
+      productEntries = (body.products as string[]).map(systemName => ({
         systemName,
         name: systemName,
         namespace: body.namespace!,
         authType: 'api-key',
-      })),
+      }));
+    } else {
+      productEntries = (body.products as { id: string; namespace: string }[]).map(p => ({
+        systemName: p.id,
+        name: p.id,
+        namespace: p.namespace,
+        authType: 'api-key',
+      }));
+    }
+
+    const event: MigrationEvent = {
+      event: 'migration-applied',
+      planId: body.planId,
+      products: productEntries,
       resources: body.resources,
       clusterDomain,
       timestamp: new Date().toISOString(),
