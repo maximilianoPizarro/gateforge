@@ -15,9 +15,9 @@ entries:
       artifacthub.io/operator: "false"
     apiVersion: v2
     appVersion: 0.1.8
-    created: "2026-04-27T18:10:29.040213919Z"
+    created: "2026-04-27T18:39:47.521409127Z"
     description: AI-powered 3scale to Red Hat Connectivity Link migration platform
-    digest: 29d673f3e82d255689123278307a41d29fb9771d736016eeaac4fa09507ed4e8
+    digest: 1fb2b4797b73c2a43fef8d6165c2ee2f72a97011976e2509b2c0c7def3855f20
     home: https://maximilianopizarro.github.io/gateforge/
     icon: https://maximilianopizarro.github.io/gateforge/assets/logo.svg
     maintainers:
@@ -44,7 +44,7 @@ entries:
       artifacthub.io/operator: "false"
     apiVersion: v2
     appVersion: 0.1.7
-    created: "2026-04-27T18:10:29.039507394Z"
+    created: "2026-04-27T18:39:47.52071953Z"
     description: AI-powered 3scale to Red Hat Connectivity Link migration platform
     digest: 5978d6f94b13846222258e153de380ddc678979d3df70801433e0e52039d3f45
     home: https://maximilianopizarro.github.io/gateforge/
@@ -73,7 +73,7 @@ entries:
       artifacthub.io/operator: "false"
     apiVersion: v2
     appVersion: 0.1.6
-    created: "2026-04-27T18:10:29.038808422Z"
+    created: "2026-04-27T18:39:47.520019594Z"
     description: AI-powered 3scale to Red Hat Connectivity Link migration platform
     digest: 808480655aa6ee5e0cbd64bc743f5a39e596798bdbb7d469639f93d5fd57784b
     home: https://maximilianopizarro.github.io/gateforge/
@@ -102,7 +102,7 @@ entries:
       artifacthub.io/operator: "false"
     apiVersion: v2
     appVersion: 0.1.4
-    created: "2026-04-27T18:10:29.038376681Z"
+    created: "2026-04-27T18:39:47.519596946Z"
     description: AI-powered 3scale to Red Hat Connectivity Link migration platform
     digest: 3e27c76150b88accaa0418444454733ff457f632084f7b3fded6ef98c4b598a1
     home: https://maximilianopizarro.github.io/gateforge/
@@ -117,4 +117,4 @@ entries:
     urls:
     - https://maximilianopizarro.github.io/gateforge/gateforge-0.1.4.tgz
     version: 0.1.4
-generated: "2026-04-27T18:10:29.037793433Z"
+generated: "2026-04-27T18:39:47.518962302Z"
