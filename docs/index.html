@@ -237,7 +237,7 @@
       <a href="#getting-started" class="hero-btn hero-btn-primary" data-tab="getting-started">Install with Helm</a>
       <a href="#screenshots" class="hero-btn hero-btn-secondary" data-tab="features">See Screenshots</a>
     </div>
-    <span class="version-tag">v0.1.7</span>
+    <span class="version-tag">v0.1.8</span>
     <div class="experimental-banner">
       <span class="exp-badge">EXPERIMENTAL</span>
       <span>Independent open-source project &mdash; not an official Red Hat product. APIs may change without notice.</span>
@@ -355,7 +355,7 @@
           <tr><td>Red Hat Developer Hub</td><td>1.9.x</td><td><span class="compat-badge compat-tested">Tested</span></td></tr>
           <tr><td>3scale Plugin for Developer Hub</td><td>3.10.x (backstage-community-plugin-3scale-backend)</td><td><span class="compat-badge compat-tested">Tested</span></td></tr>
           <tr><td>kuadrantctl</td><td>0.10.x</td><td><span class="compat-badge compat-tested">Tested</span></td></tr>
-          <tr><td>GateForge DevHub Plugin</td><td>0.1.7 (<code>quay.io/maximilianopizarro/gateforge-devhub-plugin</code>)</td><td><span class="compat-badge compat-tested">Tested</span></td></tr>
+          <tr><td>GateForge DevHub Plugin</td><td>0.1.8 (<code>quay.io/maximilianopizarro/gateforge-devhub-plugin</code>)</td><td><span class="compat-badge compat-tested">Tested</span></td></tr>
           <tr><td>OpenTelemetry Operator</td><td>0.x (Collector + Instrumentation)</td><td><span class="compat-badge compat-compatible">Compatible</span></td></tr>
           <tr><td>Grafana Operator</td><td>5.x</td><td><span class="compat-badge compat-compatible">Compatible</span></td></tr>
         </tbody>
@@ -856,8 +856,8 @@ graph LR
       <table class="arch-table">
         <thead><tr><th>Value</th><th>Default</th><th>Description</th></tr></thead>
         <tbody>
-          <tr><td><code>backend.image.tag</code></td><td>v0.1.7</td><td>Backend image tag</td></tr>
-          <tr><td><code>frontend.image.tag</code></td><td>v0.1.7</td><td>Frontend image tag</td></tr>
+          <tr><td><code>backend.image.tag</code></td><td>v0.1.8</td><td>Backend image tag</td></tr>
+          <tr><td><code>frontend.image.tag</code></td><td>v0.1.8</td><td>Frontend image tag</td></tr>
           <tr><td><code>ai.endpoint</code></td><td>litellm-prod...</td><td>LLM endpoint URL</td></tr>
           <tr><td><code>ai.model</code></td><td>deepseek-r1-distill-qwen-14b</td><td>AI model name</td></tr>
           <tr><td><code>ai.apiKey</code></td><td>""</td><td>LLM API key</td></tr>
@@ -945,10 +945,10 @@ graph LR
       <p style="color:#6a6e73; margin-bottom:8px;">Add both GateForge plugins to the <code>dynamic-plugins-rhdh</code> ConfigMap:</p>
       <div class="install-block">
         <span class="comment"># Backend plugin (entity processor)</span><br>
-        <span class="cmd">- package: oci://quay.io/maximilianopizarro/gateforge-devhub-plugin:0.1.7!gateforge-backstage-plugin-catalog-backend-module-gateforge<br>
+        <span class="cmd">- package: oci://quay.io/maximilianopizarro/gateforge-devhub-plugin:0.1.8!gateforge-backstage-plugin-catalog-backend-module-gateforge<br>
         &nbsp; disabled: false</span><br><br>
         <span class="comment"># Frontend plugin (Observability, Topology, Editor tabs)</span><br>
-        <span class="cmd">- package: oci://quay.io/maximilianopizarro/gateforge-devhub-frontend-plugin:0.1.7!gateforge-backstage-plugin-gateforge-frontend<br>
+        <span class="cmd">- package: oci://quay.io/maximilianopizarro/gateforge-devhub-frontend-plugin:0.1.8!gateforge-backstage-plugin-gateforge-frontend<br>
         &nbsp; disabled: false<br>
         &nbsp; pluginConfig:<br>
         &nbsp;&nbsp; dynamicPlugins:<br>
@@ -1042,7 +1042,7 @@ sequenceDiagram
         &nbsp; source:<br>
         &nbsp;&nbsp; repoURL: https://maximilianopizarro.github.io/gateforge/<br>
         &nbsp;&nbsp; chart: gateforge<br>
-        &nbsp;&nbsp; targetRevision: "0.1.7"<br>
+        &nbsp;&nbsp; targetRevision: "0.1.8"<br>
         &nbsp;&nbsp; helm:<br>
         &nbsp;&nbsp;&nbsp; values: |<br>
         &nbsp;&nbsp;&nbsp;&nbsp; clusterDomain: apps.cluster.example.com<br>
@@ -1482,7 +1482,7 @@ flowchart TD
         Red Hat Connectivity Link, and Red Hat Developer Hub but is maintained independently.
         No commercial support or SLAs are offered at this time.
       </p>
-      <p class="copy">GateForge v0.1.7 &copy; 2026 Maximiliano Pizarro &mdash; <a href="LICENSE" style="color:#73bcf7;">Apache 2.0 License</a></p>
+      <p class="copy">GateForge v0.1.8 &copy; 2026 Maximiliano Pizarro &mdash; <a href="LICENSE" style="color:#73bcf7;">Apache 2.0 License</a></p>
     </div>
   </footer>
 
@@ -1537,7 +1537,8 @@ flowchart TD
         });
         window.scrollTo({ top: 0, behavior: 'instant' });
         history.replaceState(null, '', '#' + tabId);
-        mermaid.run();
+        var pending = document.querySelectorAll('.tab-page.active pre.mermaid:not([data-processed])');
+        if (pending.length) mermaid.run({ nodes: Array.from(pending) });
       }
       document.addEventListener('click', function(e) {
         var link = e.target.closest('[data-tab]:not(.tab-page)');

@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: 'Image tag (e.g. v0.1.7)'
+        description: 'Image tag (e.g. v0.1.8)'
         required: false
-        default: 'v0.1.7'
+        default: 'v0.1.8'
         type: string
 
 env:
@@ -24,13 +24,13 @@ jobs:
 
       - name: Resolve image tag
         run: |
-          # Chart 0.1.7: default image tag v0.1.7 (override via workflow_dispatch).
+          # Chart 0.1.8: default image tag v0.1.8 (override via workflow_dispatch).
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             TAG="${{ github.event.inputs.image_tag }}"
-            if [ -z "$TAG" ]; then TAG=v0.1.7; fi
+            if [ -z "$TAG" ]; then TAG=v0.1.8; fi
             echo "IMAGE_TAG=$TAG" >> "$GITHUB_ENV"
           else
-            echo "IMAGE_TAG=v0.1.7" >> "$GITHUB_ENV"
+            echo "IMAGE_TAG=v0.1.8" >> "$GITHUB_ENV"
           fi
 
       - name: Login to Quay.io
@@ -115,7 +115,7 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@v4
         with:
-          version: v3.14.0
+          version: v3.17.3
 
       - name: Package Helm chart
         run: |

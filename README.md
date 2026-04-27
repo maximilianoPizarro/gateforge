@@ -14,7 +14,7 @@
 
 AI-powered migration platform for transitioning from **Red Hat 3scale API Management** to **Red Hat Connectivity Link** (Kuadrant) on OpenShift. Built with **Quarkus** (backend), **Angular** (frontend), **PostgreSQL** (persistence), and **LangChain4j** (AI).
 
-> **v0.1.7** -- Multi-source 3scale, multi-cluster deployment, hub-spoke architecture with PostgreSQL persistence.
+> **v0.1.8** -- Multi-source 3scale, multi-cluster deployment, hub-spoke architecture with PostgreSQL persistence.
 
 ### About this project
 
@@ -40,7 +40,7 @@ AI-powered migration platform for transitioning from **Red Hat 3scale API Manage
 
 ---
 
-## Key Features (v0.1.7)
+## Key Features (v0.1.8)
 
 ### Phase 1: Multiple 3scale Sources
 - Connect to **N 3scale Admin API endpoints** simultaneously
@@ -212,8 +212,8 @@ helm install gateforge gateforge/gateforge \
 
 | Value | Default | Description |
 |-------|---------|-------------|
-| `backend.image.tag` | v0.1.7 | Backend image tag |
-| `frontend.image.tag` | v0.1.7 | Frontend image tag |
+| `backend.image.tag` | v0.1.8 | Backend image tag |
+| `frontend.image.tag` | v0.1.8 | Frontend image tag |
 | `ai.enabled` | true | Enable AI features |
 | `ai.endpoint` | litellm-prod... | LLM endpoint URL |
 | `ai.model` | deepseek-r1-distill-qwen-14b | AI model name |

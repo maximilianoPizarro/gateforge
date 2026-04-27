@@ -141,6 +141,7 @@ public class MigrationResource {
         if (developerHubEnabled && developerHubUrl != null && !developerHubUrl.isBlank()
                 && !"none".equalsIgnoreCase(developerHubUrl.trim())) {
             postMigrationEventToDeveloperHub(plan, id);
+            registerCatalogEntities(plan);
         }
 
         return result;
@@ -154,16 +155,19 @@ public class MigrationResource {
             }
             String url = baseUrl + "/api/catalog/gateforge-entity-provider/migration-event";
 
-            String primaryNs = plan.resources().stream()
-                    .filter(r -> "HTTPRoute".equals(r.kind()))
-                    .findFirst()
-                    .map(MigrationPlan.GeneratedResource::namespace)
-                    .orElseGet(() -> plan.resources().isEmpty() ? "default"
-                            : Optional.ofNullable(plan.resources().get(0).namespace()).orElse("default"));
-
-            List<String> productIds = new ArrayList<>();
+            List<Map<String, String>> productEntries = new ArrayList<>();
             for (String productName : plan.sourceProducts()) {
-                productIds.add(productName.toLowerCase().replaceAll("[^a-z0-9-]", "-"));
+                String sysName = productName.toLowerCase().replaceAll("[^a-z0-9-]", "-");
+                String routeName = sysName + "-route";
+                String ns = plan.resources().stream()
+                        .filter(r -> "HTTPRoute".equals(r.kind()) && routeName.equals(r.name()))
+                        .findFirst()
+                        .map(MigrationPlan.GeneratedResource::namespace)
+                        .orElse("default");
+                Map<String, String> entry = new LinkedHashMap<>();
+                entry.put("id", sysName);
+                entry.put("namespace", ns);
+                productEntries.add(entry);
             }
 
             List<Map<String, String>> resourcesPayload = new ArrayList<>();
@@ -176,8 +180,7 @@ public class MigrationResource {
             }
 
             Map<String, Object> payload = new LinkedHashMap<>();
-            payload.put("products", productIds);
-            payload.put("namespace", primaryNs);
+            payload.put("products", productEntries);
             payload.put("planId", planId);
             payload.put("resources", resourcesPayload);
 
@@ -196,6 +199,48 @@ public class MigrationResource {
             }
         } catch (Exception e) {
             LOG.warnf("Failed to POST migration-event to Developer Hub: %s", e.getMessage());
+        }
+    }
+
+    private void registerCatalogEntities(MigrationPlan plan) {
+        String catalogYaml = plan.catalogInfoYaml();
+        if (catalogYaml == null || catalogYaml.isBlank()) {
+            LOG.info("No catalog-info YAML in plan, skipping catalog registration");
+            return;
+        }
+        try {
+            String baseUrl = developerHubUrl.trim();
+            if (baseUrl.endsWith("/")) {
+                baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+            }
+            String locationUrl = baseUrl + "/api/catalog/locations";
+
+            String gateforgeBaseUrl = baseUrl + "/api/migration/plans/" + plan.id();
+
+            for (String productName : plan.sourceProducts()) {
+                String sysName = productName.toLowerCase().replaceAll("[^a-z0-9-]", "-");
+                String catalogEndpoint = gateforgeBaseUrl + "/catalog-info/" + sysName;
+
+                Map<String, Object> locationPayload = new LinkedHashMap<>();
+                locationPayload.put("type", "url");
+                locationPayload.put("target", catalogEndpoint);
+
+                String json = objectMapper.writeValueAsString(locationPayload);
+                HttpRequest req = HttpRequest.newBuilder()
+                        .uri(URI.create(locationUrl))
+                        .timeout(Duration.ofSeconds(30))
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString(json))
+                        .build();
+
+                HttpResponse<String> resp = scaffolderClient.send(req, HttpResponse.BodyHandlers.ofString());
+                LOG.infof("Catalog location POST for %s → HTTP %d", sysName, resp.statusCode());
+                if (resp.statusCode() >= 400) {
+                    LOG.warnf("Catalog location error for %s: %s", sysName, resp.body());
+                }
+            }
+        } catch (Exception e) {
+            LOG.warnf("Failed to register catalog entities: %s", e.getMessage());
         }
     }
 

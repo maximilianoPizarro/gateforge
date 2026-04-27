@@ -1,6 +1,6 @@
 {
   "name": "@gateforge/backstage-plugin-catalog-backend-module-gateforge",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Backstage backend module for the catalog that ingests GateForge migration events and registers Kuadrant/Connectivity Link entities",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -30,7 +30,7 @@
   "devDependencies": {
     "@backstage/cli": "^0.29.0",
     "@types/express": "^4.17.21",
-    "@types/node": "^20.11.0",
+    "@types/node": "^22.0.0",
     "typescript": "~5.4.0"
   },
   "files": [

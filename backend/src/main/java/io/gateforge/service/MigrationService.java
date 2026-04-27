@@ -138,9 +138,9 @@ public class MigrationService {
             oasCache.put(sysName, effectiveOas);
 
             boolean usedKuadrantctl = false;
+            boolean multiBackend = ctx.resolvedBackends.size() > 1;
 
-            // Try kuadrantctl first
-            if (effectiveOas != null) {
+            if (!multiBackend && effectiveOas != null) {
                 try {
                     String httpRouteOut = kuadrantCtlService.generateHttpRoute(effectiveOas);
                     if (httpRouteOut != null && !httpRouteOut.startsWith("ERROR") && httpRouteOut.contains("kind")) {
@@ -154,6 +154,9 @@ public class MigrationService {
                 } catch (Exception e) {
                     LOG.warnf("kuadrantctl HTTPRoute failed for %s: %s", sysName, e.getMessage());
                 }
+            } else if (multiBackend) {
+                LOG.infof("Product %s has %d backends, skipping kuadrantctl for multi-backend HTTPRoute",
+                        sysName, ctx.resolvedBackends.size());
             }
 
             if (!usedKuadrantctl) {
@@ -182,7 +185,7 @@ public class MigrationService {
             resources.add(buildOpenShiftRoute(sysName, gatewayName));
         }
 
-        String catalogInfo = developerHubEnabled ? buildCatalogInfo(products, gatewayStrategy, oasCache) : null;
+        String catalogInfo = developerHubEnabled ? buildCatalogInfo(products, gatewayStrategy, oasCache, resources) : null;
 
         String planId = UUID.randomUUID().toString().substring(0, 8);
         String effectiveClusterId = targetClusterId != null ? targetClusterId : "local";
@@ -669,37 +672,35 @@ public class MigrationService {
         MigrationPlan plan = getPlan(planId);
         if (plan == null) return null;
 
-        String sysName = productName.toLowerCase().replaceAll("[^a-z0-9-]", "-");
-        String componentName = sysName.endsWith(componentSuffix) ? sysName : sysName + componentSuffix;
+        String sysName = sanitizeName(productName);
+        String componentName = sysName + componentSuffix;
+        String catalogYaml = plan.catalogInfoYaml();
 
-        String baseName = sysName.endsWith(componentSuffix)
-                ? sysName.substring(0, sysName.length() - componentSuffix.length())
-                : sysName;
+        if (catalogYaml != null && !catalogYaml.isBlank()) {
+            StringBuilder result = new StringBuilder();
+            String[] docs = catalogYaml.split("(?m)^---\\s*$");
+            for (String doc : docs) {
+                String trimmed = doc.trim();
+                if (trimmed.isEmpty()) continue;
+                boolean isComponent = trimmed.contains("name: " + componentName);
+                boolean isApiForProduct = trimmed.contains("kuadrant.io/apiproduct: " + sysName)
+                        && trimmed.contains("kind: API");
+                if (isComponent || isApiForProduct) {
+                    if (result.length() > 0) result.append("\n---\n");
+                    result.append(trimmed);
+                }
+            }
+            if (result.length() > 0) return result.toString();
+        }
 
-        String routeName = baseName + "-route";
+        String routeName = sysName + "-route";
         String namespace = plan.resources().stream()
                 .filter(r -> "HTTPRoute".equals(r.kind()) && r.name().equals(routeName))
                 .findFirst().map(MigrationPlan.GeneratedResource::namespace).orElse(gatewayNamespace);
-        String hostname = baseName + "." + clusterDomain;
-        String apiProductName = plan.resources().stream()
-                .filter(r -> "APIProduct".equals(r.kind()) && r.name().equals(baseName))
-                .findFirst().map(MigrationPlan.GeneratedResource::name).orElse(baseName);
-        String apiProductNamespace = plan.resources().stream()
-                .filter(r -> "APIProduct".equals(r.kind()) && r.name().equals(baseName))
-                .findFirst().map(MigrationPlan.GeneratedResource::namespace).orElse(namespace);
-
-        StringBuilder providesApis = new StringBuilder();
-        plan.resources().stream()
-                .filter(r -> "APIProduct".equals(r.kind()) && r.name().equals(baseName))
-                .forEach(r -> providesApis.append("                    - ").append(r.name()).append("\n"));
-        if (providesApis.length() == 0) {
-            providesApis.append("                    - ").append(baseName).append("\n");
-        }
-
-        String desc = baseName;
+        String hostname = sysName + "." + clusterDomain;
         String gfUrl = developerHubUrl.equals("none") ? "https://gateforge." + clusterDomain : developerHubUrl;
 
-        String yaml = """
+        return """
                 apiVersion: backstage.io/v1alpha1
                 kind: Component
                 metadata:
@@ -710,19 +711,16 @@ public class MigrationService {
                     kuadrant.io/namespace: %s
                     kuadrant.io/httproute: %s
                     kuadrant.io/apiproduct: %s
+                    gateforge.io/managed-by: gateforge
                     gateforge.io/migration-plan-id: %s
                     backstage.io/kubernetes-namespace: %s
                     backstage.io/kubernetes-id: %s
+                    backstage.io/kubernetes-label-selector: "app.kubernetes.io/managed-by=gateforge,gateforge.io/product=%s"
                     backstage.io/managed-by-origin-location: "gateforge:%s"
                   tags:
                     - connectivity-link
                     - kuadrant
                     - gateforge-migrated
-                  links:
-                    - title: API Gateway Endpoint
-                      url: https://%s
-                    - title: GateForge Dashboard
-                      url: %s
                 spec:
                   type: service
                   lifecycle: production
@@ -743,47 +741,15 @@ public class MigrationService {
                     kuadrant.io/httproute: %s
                     backstage.io/kubernetes-namespace: %s
                     backstage.io/kubernetes-id: %s
-                  tags:
-                    - connectivity-link
-                    - kuadrant
-                    - gateforge-migrated
-                    - gateway-api
-                  links:
-                    - title: API Gateway Endpoint
-                      url: https://%s
-                    - title: GateForge Dashboard
-                      url: %s
                 spec:
                   type: openapi
                   lifecycle: production
                   owner: platform-engineering
                   system: gateforge-migrated-apis
-                  definition: |
-                    openapi: "3.0.3"
-                    info:
-                      title: "%s"
-                      version: "1.0.0"
-                      description: "Migrated from 3scale to Connectivity Link by GateForge"
-                    paths:
-                      /:
-                        get:
-                          summary: Service info
-                          responses:
-                            '200':
-                              description: OK
-                """.formatted(componentName, desc, apiProductNamespace, routeName, apiProductName, planId,
-                apiProductNamespace, baseName, baseName, hostname, gfUrl, baseName,
-                baseName, desc, apiProductNamespace, apiProductName, routeName, apiProductNamespace, baseName,
-                hostname, gfUrl, desc);
-
-        if (yaml.contains("kuadrant.io/namespace:")
-                && yaml.contains("kuadrant.io/httproute:")
-                && yaml.contains("kuadrant.io/apiproduct:")) {
-            LOG.debugf(
-                    "Catalog-info for plan %s / product %s includes required Kuadrant annotations",
-                    planId, productName);
-        }
-        return yaml;
+                  definition: "placeholder"
+                """.formatted(componentName, sysName, namespace, routeName, sysName, planId,
+                namespace, sysName, sysName, sysName, sysName,
+                sysName, sysName, namespace, sysName, routeName, namespace, sysName);
     }
 
     public List<Map<String, String>> generateTestCommands(String planId) {
@@ -860,23 +826,34 @@ public class MigrationService {
     }
 
     private String buildCatalogInfo(List<ThreeScaleProduct> products, String strategy,
-            Map<String, String> oasCache) {
+            Map<String, String> oasCache, List<MigrationPlan.GeneratedResource> resources) {
         StringBuilder sb = new StringBuilder();
-        String gatewayName = "dedicated".equals(strategy) ? null :
-                "dual".equals(strategy) ? "gateforge-external" : "gateforge-shared";
         String gfUrl = developerHubUrl.equals("none") ? "https://gateforge." + clusterDomain : developerHubUrl;
 
         for (int i = 0; i < products.size(); i++) {
             ThreeScaleProduct p = products.get(i);
             String sysName = p.systemName();
-            String ns = p.backendNamespace() != null && !p.backendNamespace().isBlank()
-                    ? p.backendNamespace() : gatewayNamespace;
             String routeName = sysName + "-route";
+            String ns = resolveHttpRouteNamespace(sysName, resources);
 
             if (i > 0) sb.append("\n---\n");
 
             String desc = p.description() != null ? p.description().replace("\"", "'") : sysName;
             String hostname = sysName + "." + clusterDomain;
+
+            List<String> apiNames = new ArrayList<>();
+            if (!p.backendUsages().isEmpty()) {
+                for (ThreeScaleProduct.BackendUsage usage : p.backendUsages()) {
+                    apiNames.add(sanitizeName(usage.backendName()));
+                }
+            } else {
+                apiNames.add(sysName);
+            }
+
+            StringBuilder providesApis = new StringBuilder();
+            for (String apiName : apiNames) {
+                providesApis.append("                        - ").append(apiName).append("\n");
+            }
 
             sb.append("""
                     apiVersion: backstage.io/v1alpha1
@@ -892,6 +869,7 @@ public class MigrationService {
                         gateforge.io/managed-by: gateforge
                         backstage.io/kubernetes-namespace: %s
                         backstage.io/kubernetes-id: %s
+                        backstage.io/kubernetes-label-selector: "app.kubernetes.io/managed-by=gateforge,gateforge.io/product=%s"
                         backstage.io/managed-by-origin-location: "gateforge:%s"
                       tags:
                         - connectivity-link
@@ -908,36 +886,12 @@ public class MigrationService {
                       owner: group:default/3scale
                       system: gateforge-migrated-apis
                       providesApis:
-                        - %s
-                    """.formatted(sysName, desc, ns, routeName, sysName, ns, sysName, sysName,
-                    hostname, gfUrl, sysName));
+%s
+                    """.formatted(sysName, desc, ns, routeName, sysName, ns, sysName, sysName, sysName,
+                    hostname, gfUrl, providesApis.toString()));
 
-            String oasDefinition = oasCache.get(sysName);
-            String inlineDef;
-            if (oasDefinition != null && !oasDefinition.isBlank()) {
-                StringBuilder indented = new StringBuilder();
-                for (String line : oasDefinition.split("\n")) {
-                    indented.append("        ").append(line).append("\n");
-                }
-                inlineDef = indented.toString();
-            } else {
-                inlineDef = """
-                        openapi: "3.0.3"
-                        info:
-                          title: "%s"
-                          version: "1.0.0"
-                          description: "Migrated from 3scale to Connectivity Link by GateForge"
-                        paths:
-                          /:
-                            get:
-                              summary: Service info
-                              responses:
-                                '200':
-                                  description: OK
-                """.formatted(p.name().replace("\"", "'"));
-            }
-
-            sb.append("""
+            for (String apiName : apiNames) {
+                sb.append("""
                     ---
                     apiVersion: backstage.io/v1alpha1
                     kind: API
@@ -966,12 +920,29 @@ public class MigrationService {
                       lifecycle: production
                       owner: platform-engineering
                       system: gateforge-migrated-apis
-                      definition: |
-%s
-                    """.formatted(sysName, desc, ns, sysName, routeName, ns, sysName,
-                    hostname, gfUrl, inlineDef));
+                      definition: "placeholder"
+                    """.formatted(apiName, desc, ns, sysName, routeName, ns, apiName,
+                    hostname, gfUrl));
+            }
         }
         return sb.toString();
+    }
+
+    private String resolveHttpRouteNamespace(String productSysName,
+            List<MigrationPlan.GeneratedResource> resources) {
+        String routeName = productSysName + "-route";
+        if (resources != null) {
+            for (var r : resources) {
+                if ("HTTPRoute".equals(r.kind()) && routeName.equals(r.name())) {
+                    return r.namespace() != null ? r.namespace() : gatewayNamespace;
+                }
+            }
+        }
+        return gatewayNamespace;
+    }
+
+    private String sanitizeName(String name) {
+        return name.toLowerCase().replaceAll("[^a-z0-9-]", "-");
     }
 
     private MigrationPlan.GeneratedResource buildPlanPolicy(

@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi9/nodejs-20:latest AS builder
+FROM registry.access.redhat.com/ubi9/nodejs-22:latest AS builder
 USER 0
 WORKDIR /opt/app-root/src
 RUN mkdir -p /opt/app-root/src/.npm-global/lib && \
@@ -15,7 +15,7 @@ RUN npm install --ignore-scripts && \
 
 FROM scratch
 LABEL name="gateforge-devhub-plugin" \
-      version="0.1.7" \
+      version="0.1.8" \
       summary="GateForge Developer Hub Dynamic Plugin" \
       io.openshift.tags="gateforge,developer-hub,backstage,kuadrant,connectivity-link,dynamic-plugin" \
       url="https://github.com/maximilianoPizarro/gateforge" \

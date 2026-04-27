@@ -1,6 +1,6 @@
 FROM scratch
 LABEL name="gateforge-devhub-plugin" \
-      version="0.1.7" \
+      version="0.1.8" \
       summary="GateForge Developer Hub Dynamic Plugin" \
       description="Native RHDH dynamic backend plugin that receives GateForge migration events and registers Kuadrant/Connectivity Link entities in the Backstage catalog" \
       io.k8s.display-name="GateForge DevHub Dynamic Plugin" \
