@@ -14,5 +14,5 @@ RUN npx tsc && \
     npx @red-hat-developer-hub/cli@latest plugin export --clean --no-install
 
 FROM scratch
-LABEL com.redhat.rhdh.plugins='[{"name":"@gateforge/backstage-plugin-gateforge-frontend","version":"0.1.8","description":"GateForge frontend plugin — Observability, Topology, Component Editor tabs"}]'
+LABEL com.redhat.rhdh.plugins='[{"name":"@gateforge/backstage-plugin-gateforge-frontend","version":"0.1.9","description":"GateForge frontend plugin — Observability, Topology, Component Editor tabs"}]'
 COPY --from=builder /opt/app-root/src/dist-dynamic/ /gateforge-backstage-plugin-gateforge-frontend/

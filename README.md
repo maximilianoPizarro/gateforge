@@ -40,7 +40,7 @@ AI-powered migration platform for transitioning from **Red Hat 3scale API Manage
 
 ---
 
-## Key Features (v0.1.8)
+## Key Features (v0.1.9)
 
 ### Phase 1: Multiple 3scale Sources
 - Connect to **N 3scale Admin API endpoints** simultaneously

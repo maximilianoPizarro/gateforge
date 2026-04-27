@@ -91,7 +91,7 @@ export function createRouter(options: RouterOptions): Router {
     res.json({
       status: 'ok',
       plugin: 'gateforge-devhub',
-      version: '0.1.8',
+      version: '0.1.9',
       type: 'native-dynamic-plugin',
       uptime: process.uptime(),
     });

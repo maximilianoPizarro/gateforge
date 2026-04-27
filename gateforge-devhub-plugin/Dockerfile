@@ -15,7 +15,7 @@ RUN npm install --ignore-scripts && \
 
 FROM scratch
 LABEL name="gateforge-devhub-plugin" \
-      version="0.1.8" \
+      version="0.1.9" \
       summary="GateForge Developer Hub Dynamic Plugin" \
       io.openshift.tags="gateforge,developer-hub,backstage,kuadrant,connectivity-link,dynamic-plugin" \
       url="https://github.com/maximilianoPizarro/gateforge" \
