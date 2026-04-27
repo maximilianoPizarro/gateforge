@@ -41,12 +41,28 @@ export interface MigrationEvent {
  * found it injects backstage.io/kubernetes-namespace, kuadrant.io/*
  * annotations, and the kubernetes-id label.
  */
+export interface EntityOverride {
+  description?: string;
+  tags?: string[];
+  annotations?: Record<string, string>;
+}
+
 export class GateForgeKuadrantProcessor implements CatalogProcessor {
   private readonly logger: LoggerService;
   private readonly migrations: Map<string, MigrationEvent> = new Map();
+  private readonly entityOverrides: Map<string, EntityOverride> = new Map();
 
   constructor(logger: LoggerService) {
     this.logger = logger;
+  }
+
+  setEntityOverride(entityName: string, override: EntityOverride): void {
+    this.entityOverrides.set(entityName, override);
+    this.logger.info(`Stored entity override for '${entityName}'`);
+  }
+
+  getEntityOverride(entityName: string): EntityOverride | undefined {
+    return this.entityOverrides.get(entityName);
   }
 
   getProcessorName(): string {
@@ -75,6 +91,23 @@ export class GateForgeKuadrantProcessor implements CatalogProcessor {
     _originLocation: LocationSpec,
     _cache: CatalogProcessorCache,
   ): Promise<Entity> {
+    const override = this.entityOverrides.get(entity.metadata.name);
+    if (override) {
+      entity = {
+        ...entity,
+        metadata: {
+          ...entity.metadata,
+          ...(override.description !== undefined && { description: override.description }),
+          ...(override.tags && { tags: override.tags }),
+          annotations: {
+            ...entity.metadata.annotations,
+            ...(override.annotations || {}),
+          },
+        },
+      };
+      this.logger.info(`Applied override for entity '${entity.metadata.name}'`);
+    }
+
     if (entity.kind !== 'API') return entity;
 
     const origin =

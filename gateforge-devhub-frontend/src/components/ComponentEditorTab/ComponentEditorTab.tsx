@@ -103,10 +103,18 @@ export const ComponentEditorTab = () => {
         },
       };
 
-      const resp = await fetchApi.fetch(`/api/catalog/entities/by-uid/${entity.metadata.uid}`, {
+      const kuadrantAnnotations = Object.fromEntries(
+        Object.entries(editableAnnotations).filter(([k]) => k.startsWith('kuadrant.io/')),
+      );
+
+      const resp = await fetchApi.fetch(`/api/catalog/entity-update/${entity.metadata.name}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated),
+        body: JSON.stringify({
+          description,
+          tags,
+          annotations: kuadrantAnnotations,
+        }),
       });
 
       if (!resp.ok) {

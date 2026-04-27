@@ -39,6 +39,10 @@ export const catalogModuleGateforge = createBackendModule({
           path: '/topology',
           allow: 'unauthenticated',
         });
+        httpRouter.addAuthPolicy({
+          path: '/entity-update',
+          allow: 'unauthenticated',
+        });
 
         logger.info(
           'GateForge catalog module registered — processor + metrics/topology endpoints active',

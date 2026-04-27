@@ -36,7 +36,7 @@ export const ObservabilityTab = () => {
       return;
     }
 
-    const backendUrl = `/api/catalog/gateforge-entity-provider/metrics/${namespace}/${httproute}`;
+    const backendUrl = `/api/catalog/metrics/${namespace}/${httproute}`;
 
     fetchApi.fetch(backendUrl)
       .then(r => r.json())

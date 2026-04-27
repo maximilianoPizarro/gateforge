@@ -97,6 +97,24 @@ export function createRouter(options: RouterOptions): Router {
     });
   });
 
+  router.put('/entity-update/:name', (req: Request, res: Response) => {
+    const { name } = req.params;
+    const { description, tags, annotations } = req.body as {
+      description?: string;
+      tags?: string[];
+      annotations?: Record<string, string>;
+    };
+
+    if (!description && !tags && !annotations) {
+      res.status(400).json({ error: 'At least one of description, tags, or annotations is required' });
+      return;
+    }
+
+    processor.setEntityOverride(name, { description, tags, annotations });
+    logger.info(`Entity override saved for '${name}' — will apply on next catalog refresh`);
+    res.json({ status: 'saved', name, message: 'Override will apply on next catalog refresh cycle' });
+  });
+
   router.get('/metrics/:namespace/:httproute', async (req: Request, res: Response) => {
     const { namespace, httproute } = req.params;
     const end = Math.floor(Date.now() / 1000);
