@@ -1488,7 +1488,7 @@ flowchart TD
 
   <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
   <script>
-    mermaid.initialize({startOnLoad: true, theme: 'neutral', securityLevel: 'loose'});
+    mermaid.initialize({startOnLoad: false, theme: 'neutral', securityLevel: 'loose'});
 
     function openLightbox(el) {
       var src = el.querySelector('img').src;
@@ -1550,6 +1550,8 @@ flowchart TD
         switchTab(hash);
       } else {
         document.querySelector('.topnav-links a[data-tab="features"]').classList.add('active');
+        var initial = document.querySelectorAll('.tab-page.active pre.mermaid:not([data-processed])');
+        if (initial.length) mermaid.run({ nodes: Array.from(initial) });
       }
     })();
   </script>
