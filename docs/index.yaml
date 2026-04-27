@@ -15,9 +15,9 @@ entries:
       artifacthub.io/operator: "false"
     apiVersion: v2
     appVersion: 0.1.9
-    created: "2026-04-27T23:21:13.829584535Z"
+    created: "2026-04-27T23:35:15.787013071Z"
     description: AI-powered 3scale to Red Hat Connectivity Link migration platform
-    digest: 3f1a34468f6fc302538bc558f8d7bd79459ee70b4049dcb917e80e3ec5da50ba
+    digest: 18614374f09795621e3d64cb6363afa54bf993e0c022026c795eafa11f5aa9d8
     home: https://maximilianopizarro.github.io/gateforge/
     icon: https://maximilianopizarro.github.io/gateforge/assets/logo.svg
     maintainers:
@@ -44,7 +44,7 @@ entries:
       artifacthub.io/operator: "false"
     apiVersion: v2
     appVersion: 0.1.8
-    created: "2026-04-27T23:21:13.82886586Z"
+    created: "2026-04-27T23:35:15.786392106Z"
     description: AI-powered 3scale to Red Hat Connectivity Link migration platform
     digest: bed00890095db1deb66d1fa9504c1708a467117ca8b5da24b3103fe3509ff6cb
     home: https://maximilianopizarro.github.io/gateforge/
@@ -73,7 +73,7 @@ entries:
       artifacthub.io/operator: "false"
     apiVersion: v2
     appVersion: 0.1.7
-    created: "2026-04-27T23:21:13.827025569Z"
+    created: "2026-04-27T23:35:15.785754129Z"
     description: AI-powered 3scale to Red Hat Connectivity Link migration platform
     digest: 5978d6f94b13846222258e153de380ddc678979d3df70801433e0e52039d3f45
     home: https://maximilianopizarro.github.io/gateforge/
@@ -102,7 +102,7 @@ entries:
       artifacthub.io/operator: "false"
     apiVersion: v2
     appVersion: 0.1.6
-    created: "2026-04-27T23:21:13.82622962Z"
+    created: "2026-04-27T23:35:15.785128034Z"
     description: AI-powered 3scale to Red Hat Connectivity Link migration platform
     digest: 808480655aa6ee5e0cbd64bc743f5a39e596798bdbb7d469639f93d5fd57784b
     home: https://maximilianopizarro.github.io/gateforge/
@@ -131,7 +131,7 @@ entries:
       artifacthub.io/operator: "false"
     apiVersion: v2
     appVersion: 0.1.4
-    created: "2026-04-27T23:21:13.825807711Z"
+    created: "2026-04-27T23:35:15.784710147Z"
     description: AI-powered 3scale to Red Hat Connectivity Link migration platform
     digest: 3e27c76150b88accaa0418444454733ff457f632084f7b3fded6ef98c4b598a1
     home: https://maximilianopizarro.github.io/gateforge/
@@ -146,4 +146,4 @@ entries:
     urls:
     - https://maximilianopizarro.github.io/gateforge/gateforge-0.1.4.tgz
     version: 0.1.4
-generated: "2026-04-27T23:21:13.825275345Z"
+generated: "2026-04-27T23:35:15.78419055Z"
